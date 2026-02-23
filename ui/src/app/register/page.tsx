@@ -52,7 +52,7 @@ export default function RegisterPage() {
         animation: "gradient-shift 10s ease infinite",
       }}
     >
-      {/* Padrão de pontos */}
+      
       <div
         className="absolute inset-0 opacity-[0.06] pointer-events-none"
         style={{
@@ -60,7 +60,7 @@ export default function RegisterPage() {
         }}
       />
       <div className="w-full max-w-sm relative z-10">
-        {/* Marca */}
+        
         <div className="text-center mb-8">
           <div className="inline-flex items-center justify-center w-14 h-14 rounded-2xl bg-[#FF640F] mb-4 shadow-lg shadow-orange-500/25 hover:scale-105 transition-transform duration-200">
             <svg className="w-7 h-7 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
@@ -71,7 +71,7 @@ export default function RegisterPage() {
           <p className="text-slate-400 text-sm mt-1">Comece a gerenciar suas finanças</p>
         </div>
 
-        {/* Card */}
+    
         <div
           className="bg-slate-800/70 backdrop-blur-sm border border-slate-700/50 rounded-2xl p-7 shadow-2xl"
           style={{ animation: "modal-in 0.35s ease-out forwards" }}

@@ -1,92 +1,137 @@
-# 💼 Desafio Técnico Dev Fullstack
-Este é um desafio técnico para a vaga de Desenvolvedor Pleno. Seu objetivo é desenvolver uma aplicação movimentações financeiras, com autenticação de usuário, associação de categorias e persistência em banco de dados.
+# 🚀 Desafio Dev
 
-## 🧰 Requisitos Técnicos
-- Usar a estrutura inicial deste repositório (API utilizando NestJS e UI utilizando NextJS+Tailwind).
-- Login de usuário.
-- Cadastro de Usuários.
-- Cadastro de Movimentações.
-- Cadastro de Categorias
-- As movimentações devem ser associadas ao usuário autenticado.
+Aplicação full stack desenvolvida como desafio técnico, com
+autenticação, integração entre front-end e back-end e deploy em ambiente
+real.
 
-## ✅ O que será avaliado?
+🔗 **Aplicação online:**\
+👉 https://desafio-dev-lemon.vercel.app/login
 
-- **📁 Organização do Código**  
-  Estrutura clara de pastas e arquivos, padronização e uso adequado de convenções do framework.
+------------------------------------------------------------------------
 
-- **🧹 Legibilidade e Clareza**  
-  Código limpo, bem nomeado e fácil de entender. Comentários úteis (quando necessário) e ausência de complexidade desnecessária.
+## 📌 Sobre o Projeto
 
-- **🛠️ Boas Práticas de Desenvolvimento**  
-  Uso de princípios como DRY (Don't Repeat Yourself), SOLID, controle de erros, validações e segurança básica.
+Este projeto simula um fluxo de autenticação com separação clara entre
+front-end e back-end, aplicando boas práticas de organização,
+arquitetura e comunicação via API.
 
-- **💾 Persistência de Dados**  
-  Implementação correta de banco de dados, com relacionamentos adequados entre usuários, categorias e movimentações.  
-  **Dica:** Use um ORM 👀
+O objetivo foi construir uma aplicação estruturada, escalável e com
+deploy funcional.
 
-- **📝 Documentação**  
-  README com orientações completas sobre instalação*, execução e stack utilizada.  
-  A API deve estar documentada com **Swagger**.
+------------------------------------------------------------------------
 
-> ⚠️ **Importante:** Projetos que **não rodarem seguindo as instruções do README** poderão **ser desconsiderados** na avaliação.
+## 🛠️ Tecnologias Utilizadas
 
+### Front-end
 
-## 🌟 Diferenciais
-Não são obrigatórios, mas serão considerados um **bônus** na sua avaliação:
+-   React
+-   TypeScript
+-   Vite
+-   TailwindCSS
 
-- 🧪 **Testes Automatizados**  
-  Cobertura de testes (unitários e/ou de integração).
+### Back-end
 
-- 📱 **Responsividade no Frontend**  
-  Interface adaptada para diferentes tamanhos de tela.
+-   NestJS
+-   Node.js
 
-- 🚀 **Deploy do Projeto**  
-  Aplicação hospedada (ex: Vercel, Netlify, Render, Railway, etc), com link acessível no README.
+### Deploy
 
-- 🛡️ **Tratamento de Erros e Validações**  
-  Respostas consistentes e mensagens claras de erro na API.
+-   Front-end: Vercel
+-   Back-end: Render
 
-- 🧩 **Arquitetura Escalável**  
-  Separação por camadas (ex: controllers, services, repositories), facilitando manutenção e evolução do projeto.
+------------------------------------------------------------------------
 
-- 🗂️ **Documentação Extra**  
-  Diagramas, fluxos ou qualquer outro material que ajude a entender a arquitetura ou decisões técnicas.
+## ⚠️ Observação sobre o Back-end (Render)
 
-## 📁 Estrutura do Projeto
+O back-end está hospedado no plano gratuito do Render.\
+Por conta disso, após um período de inatividade, o serviço pode entrar
+em modo "sleep".
 
-O projeto está dividido em duas aplicações separadas:
-```text
-📦 projeto-raiz/
-├── 📁 api/                      # Backend (NestJS)
-│   ├── 📁 node_modules/
-│   ├── 📁 src/                  # Código-fonte da API
-│   ├── 📁 test/                 # Testes automatizados
-│   ├── ...
-│
-├── 📁 ui/                       # Frontend (Next.js)
-│   ├── 📁 node_modules/
-│   ├── 📁 public/               # Arquivos estáticos
-│   ├── 📁 src/
-│   │   └── 📁 app/              # Código-fonte do frontend
-│   ├── ...
+Quando isso acontece, a primeira requisição pode levar alguns segundos
+para responder enquanto o servidor é "acordado" automaticamente.
+
+Após essa primeira requisição, as respostas voltam ao tempo normal.
+
+------------------------------------------------------------------------
+
+## 🏗️ Estrutura do Projeto
+
+desafio-dev/ │ ├── ui/ \# Front-end (React + Vite) └── api/ \# Back-end
+(NestJS)
+
+------------------------------------------------------------------------
+
+## ⚙️ Como rodar o projeto localmente
+
+### 1️⃣ Clonar o repositório
+
+``` bash
+git clone https://github.com/samuelbatista3rios/desafio-dev.git
+cd desafio-dev
 ```
 
-## 🗄️ Banco de Dados
-Se sua aplicação utilizar **banco de dados relacional** (como PostgreSQL, MySQL, etc), é **obrigatório** fornecer um dos seguintes:
+------------------------------------------------------------------------
 
-- Script SQL para criação das tabelas e estruturas necessárias  
-  **ou**
-- Migrations configuradas e executáveis via ORM.
+### 2️⃣ Rodar o Back-end
 
-> ⚠️ **Importante:** Sem essas informações, **não será possível rodar a aplicação**, e ela poderá ser **desconsiderada** na avaliação.
+``` bash
+cd api
+npm install
+npm run start:dev
+```
 
-## ⏱️ Prazo de entrega sugerido:
-3 a 5 dias corridos. Qualidade importa mais do que velocidade.
+A API ficará disponível por padrão em:
 
-## 🚀 Como Enviar sua Solução
-- 🔀 Faça um Fork deste repositório para a sua conta no GitHub.
-- 🧑🏽‍💻 Implemente a sua solução no repositório forkado.
-- 🌐 Certifique-se de que o repositório esteja público.
-- 📩 Envie o link do seu repositório para o e-mail:
-  - ti@profissionaissa.com
-  - Com cópia para: jonata.martins@profissionaissa.com
+http://localhost:3000
+
+------------------------------------------------------------------------
+
+### 3️⃣ Rodar o Front-end
+
+``` bash
+cd ui
+npm install
+npm run dev
+```
+
+O front ficará disponível em:
+
+http://localhost:5173
+
+------------------------------------------------------------------------
+
+## 🔐 Funcionalidades
+
+-   Tela de Login
+-   Validação de credenciais
+-   Integração com API REST
+-   Tratamento de erros
+-   Estrutura modular e organizada
+
+------------------------------------------------------------------------
+
+## 🧠 Decisões Técnicas
+
+-   Uso de TypeScript para maior segurança e previsibilidade
+-   Arquitetura modular no NestJS
+-   Separação clara entre camadas (controller, service)
+-   Deploy separado para front e back
+-   Estrutura preparada para escalar funcionalidades
+
+------------------------------------------------------------------------
+
+## 🌐 Deploy
+
+A aplicação está disponível publicamente:
+
+👉 https://desafio-dev-lemon.vercel.app/login
+
+Front-end hospedado na Vercel\
+Back-end hospedado no Render
+
+------------------------------------------------------------------------
+
+## 👨‍💻 Autor
+
+Samuel Batista\
+Desenvolvedor Full Stack

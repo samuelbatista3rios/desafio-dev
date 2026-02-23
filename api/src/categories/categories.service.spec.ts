@@ -95,6 +95,27 @@ describe('CategoriesService', () => {
     });
   });
 
+  describe('update', () => {
+    it('deve atualizar e retornar a categoria', async () => {
+      const updated = { ...mockCategory, name: 'Alimentação Saudável' };
+      mockRepository.findOne.mockResolvedValue({ ...mockCategory });
+      mockRepository.save.mockResolvedValue(updated);
+
+      const result = await service.update('cat-uuid-1', userId, { name: 'Alimentação Saudável' });
+
+      expect(mockRepository.save).toHaveBeenCalled();
+      expect(result.name).toBe('Alimentação Saudável');
+    });
+
+    it('deve lançar ForbiddenException ao atualizar categoria de outro usuário', async () => {
+      mockRepository.findOne.mockResolvedValue({ ...mockCategory, userId: 'outro-user' });
+
+      await expect(
+        service.update('cat-uuid-1', userId, { name: 'x' }),
+      ).rejects.toThrow(ForbiddenException);
+    });
+  });
+
   describe('remove', () => {
     it('deve remover categoria do usuário', async () => {
       mockRepository.findOne.mockResolvedValue(mockCategory);
@@ -102,6 +123,12 @@ describe('CategoriesService', () => {
 
       await expect(service.remove('cat-uuid-1', userId)).resolves.not.toThrow();
       expect(mockRepository.remove).toHaveBeenCalledWith(mockCategory);
+    });
+
+    it('deve lançar NotFoundException ao remover categoria inexistente', async () => {
+      mockRepository.findOne.mockResolvedValue(null);
+
+      await expect(service.remove('nao-existe', userId)).rejects.toThrow(NotFoundException);
     });
   });
 });

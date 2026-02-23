@@ -20,7 +20,6 @@ export default function RootLayout({
   return (
     <html lang="pt-BR" suppressHydrationWarning>
       <body className={`${geistSans.variable} antialiased`} suppressHydrationWarning>
-        {/* Script bloqueante: lê o tema salvo antes do primeiro render para evitar flash */}
         <script
           dangerouslySetInnerHTML={{
             __html: `

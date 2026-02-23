@@ -1,5 +1,12 @@
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3001";
 
+export class ApiError extends Error {
+  constructor(public readonly status: number, message: string) {
+    super(message);
+    this.name = "ApiError";
+  }
+}
+
 function getToken(): string | null {
   if (typeof window === "undefined") return null;
   return localStorage.getItem("token");
@@ -22,10 +29,15 @@ async function request<T>(
     headers["Authorization"] = `Bearer ${token}`;
   }
 
-  const response = await fetch(`${API_URL}${path}`, {
-    ...options,
-    headers,
-  });
+  let response: Response;
+  try {
+    response = await fetch(`${API_URL}${path}`, {
+      ...options,
+      headers,
+    });
+  } catch {
+    throw new ApiError(0, "Servidor indisponível. Verifique sua conexão.");
+  }
 
   const contentType = response.headers.get("content-type");
   const data =
@@ -34,18 +46,16 @@ async function request<T>(
       : null;
 
   if (!response.ok) {
-    if (response.status === 401) {
-      if (typeof window !== "undefined") {
-        localStorage.removeItem("token");
-        localStorage.removeItem("user");
-      }
-      throw new Error("Unauthorized");
+    const message = Array.isArray(data?.message)
+      ? data.message.join(", ")
+      : data?.message || "Erro na requisição";
+
+    if (response.status === 401 && typeof window !== "undefined") {
+      localStorage.removeItem("token");
+      localStorage.removeItem("user");
     }
-    throw new Error(
-      Array.isArray(data?.message)
-        ? data.message.join(", ")
-        : data?.message || "Erro na requisição"
-    );
+
+    throw new ApiError(response.status, message);
   }
 
   return data as T;
