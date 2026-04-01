@@ -816,7 +816,7 @@ export default function DashboardPage() {
                             </span>
                           </td>
                           <td className="px-3 py-4">
-                            <div className="flex gap-1 justify-end opacity-0 group-hover:opacity-100 transition-opacity">
+                            <div className="flex gap-1 justify-end opacity-100 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity">
                               <button
                                 onClick={() => { setEditingTx(tx); setTxModal(true); }}
                                 className="p-1.5 text-slate-400 hover:text-orange-500 hover:bg-orange-50 dark:hover:bg-orange-900/20 rounded-lg transition-colors"
@@ -912,7 +912,7 @@ export default function DashboardPage() {
                             )}
                           </div>
                         </div>
-                        <div className="flex gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity shrink-0 ml-2">
+                        <div className="flex gap-0.5 opacity-100 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity shrink-0 ml-2">
                           <button
                             onClick={() => { setEditingCat(cat); setCatModal(true); }}
                             className="p-1.5 text-slate-400 hover:text-orange-500 hover:bg-orange-50 dark:hover:bg-orange-900/20 rounded-lg transition-colors"
