@@ -122,6 +122,19 @@ export const transactionsApi = {
     request<void>(`/transactions/${id}`, { method: "DELETE" }),
 };
 
+// Goals
+export const goalsApi = {
+  list: () => request<Goal[]>("/goals"),
+  create: (data: CreateGoalPayload) =>
+    request<Goal>("/goals", { method: "POST", body: JSON.stringify(data) }),
+  update: (id: string, data: Partial<CreateGoalPayload>) =>
+    request<Goal>(`/goals/${id}`, { method: "PATCH", body: JSON.stringify(data) }),
+  deposit: (id: string, amount: number) =>
+    request<Goal>(`/goals/${id}/deposit`, { method: "PATCH", body: JSON.stringify({ amount }) }),
+  remove: (id: string) =>
+    request<void>(`/goals/${id}`, { method: "DELETE" }),
+};
+
 // Types
 export interface User {
   id: string;
@@ -173,4 +186,22 @@ export interface CreateTransactionPayload {
   date: string;
   notes?: string;
   categoryId?: string;
+}
+
+export interface Goal {
+  id: string;
+  name: string;
+  targetAmount: number;
+  currentAmount: number;
+  deadline?: string | null;
+  userId: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface CreateGoalPayload {
+  name: string;
+  targetAmount: number;
+  currentAmount?: number;
+  deadline?: string;
 }

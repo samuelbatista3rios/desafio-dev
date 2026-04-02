@@ -7,9 +7,11 @@ import { UsersModule } from './users/users.module';
 import { AuthModule } from './auth/auth.module';
 import { CategoriesModule } from './categories/categories.module';
 import { TransactionsModule } from './transactions/transactions.module';
+import { GoalsModule } from './goals/goals.module';
 import { User } from './users/user.entity';
 import { Category } from './categories/category.entity';
 import { Transaction } from './transactions/transaction.entity';
+import { Goal } from './goals/goal.entity';
 
 @Module({
   imports: [
@@ -24,7 +26,7 @@ import { Transaction } from './transactions/transaction.entity';
           return {
             type: 'postgres',
             url,
-            entities: [User, Category, Transaction],
+            entities: [User, Category, Transaction, Goal],
             synchronize: config.get('NODE_ENV') !== 'production',
             logging: false,
             ssl: { rejectUnauthorized: false },
@@ -38,7 +40,7 @@ import { Transaction } from './transactions/transaction.entity';
           username: config.get('DB_USER', 'postgres'),
           password: config.get('DB_PASS', 'postgres'),
           database: config.get('DB_NAME', 'financas'),
-          entities: [User, Category, Transaction],
+          entities: [User, Category, Transaction, Goal],
           synchronize: config.get('NODE_ENV') !== 'production',
           logging: false,
         };
@@ -48,6 +50,7 @@ import { Transaction } from './transactions/transaction.entity';
     AuthModule,
     CategoriesModule,
     TransactionsModule,
+    GoalsModule,
   ],
   controllers: [AppController],
   providers: [

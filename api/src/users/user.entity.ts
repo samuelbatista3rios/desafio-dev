@@ -8,6 +8,7 @@ import {
 } from 'typeorm';
 import { Transaction } from '../transactions/transaction.entity';
 import { Category } from '../categories/category.entity';
+import { Goal } from '../goals/goal.entity';
 
 @Entity('users')
 export class User {
@@ -28,6 +29,9 @@ export class User {
 
   @OneToMany(() => Category, (category) => category.user)
   categories: Category[];
+
+  @OneToMany(() => Goal, (goal) => goal.user)
+  goals: Goal[];
 
   @CreateDateColumn()
   createdAt: Date;
