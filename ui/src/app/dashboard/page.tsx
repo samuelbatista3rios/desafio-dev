@@ -57,6 +57,7 @@ const TAB_LABELS: Record<Tab, string> = {
 };
 
 const MONTHS_PT = ["Jan", "Fev", "Mar", "Abr", "Mai", "Jun", "Jul", "Ago", "Set", "Out", "Nov", "Dez"];
+const MONTHS_FULL = ["Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho", "Julho", "Agosto", "Setembro", "Outubro", "Novembro", "Dezembro"];
 
 function getDefaultMonthFilters(): TransactionFilters {
   const now = new Date();
@@ -127,7 +128,7 @@ export default function DashboardPage() {
 
   const [chartData, setChartData] = useState<MonthlyData[]>([]);
   const [chartLoading, setChartLoading] = useState(true);
-  const [chartView, setChartView] = useState<"bar" | "pie">("bar");
+  const [chartView, setChartView] = useState<"bar" | "pie" | "line" | "annual">("bar");
   const [hoveredBar, setHoveredBar] = useState<{
     monthIdx: number;
     x: number;
@@ -135,6 +136,13 @@ export default function DashboardPage() {
     value: number;
     type: "income" | "expense";
   } | null>(null);
+
+  // Feature 9: Annual data
+  const [annualData, setAnnualData] = useState<MonthlyData[]>([]);
+  const [annualLoading, setAnnualLoading] = useState(false);
+
+  // Feature 4: Budget alert
+  const [budgetAlertDismissed, setBudgetAlertDismissed] = useState(false);
 
   const [searchQuery, setSearchQuery] = useState("");
 
@@ -175,6 +183,7 @@ export default function DashboardPage() {
     fetchCategories();
     fetchChartData();
     fetchGoals();
+    fetchAnnualData();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [ready]);
 
@@ -250,6 +259,37 @@ export default function DashboardPage() {
       }
     } finally {
       setChartLoading(false);
+    }
+  }
+
+  // Feature 9: fetchAnnualData
+  async function fetchAnnualData() {
+    setAnnualLoading(true);
+    try {
+      const now = new Date();
+      const year = now.getFullYear();
+      const startDate = `${year}-01-01`;
+      const data = await transactionsApi.list({ startDate });
+
+      const months: MonthlyData[] = [];
+      for (let m = 0; m < 12; m++) {
+        const txs = data.transactions.filter((tx) => {
+          const td = new Date(tx.date.split("T")[0] + "T12:00:00");
+          return td.getFullYear() === year && td.getMonth() === m;
+        });
+        months.push({
+          label: MONTHS_PT[m],
+          income: txs.filter((t) => t.type === "income").reduce((s, t) => s + Number(t.amount), 0),
+          expense: txs.filter((t) => t.type === "expense").reduce((s, t) => s + Number(t.amount), 0),
+        });
+      }
+      setAnnualData(months);
+    } catch (err: unknown) {
+      if (err instanceof ApiError && err.status === 401) {
+        router.replace("/login");
+      }
+    } finally {
+      setAnnualLoading(false);
     }
   }
 
@@ -343,6 +383,32 @@ export default function DashboardPage() {
     });
   }
 
+  // Feature 10: Export CSV
+  function exportToCSV() {
+    const txs = summary?.transactions ?? [];
+    const now = new Date();
+    const y = now.getFullYear();
+    const m = String(now.getMonth() + 1).padStart(2, "0");
+    const filename = `movimentacoes_${y}-${m}.csv`;
+    const header = "Descrição,Categoria,Data,Tipo,Valor";
+    const rows = txs.map((tx) => {
+      const desc = `"${tx.description.replace(/"/g, '""')}"`;
+      const cat = `"${(tx.category?.name ?? "").replace(/"/g, '""')}"`;
+      const date = formatDate(tx.date);
+      const type = tx.type === "income" ? "Receita" : "Despesa";
+      const amount = Number(tx.amount).toFixed(2).replace(".", ",");
+      return [desc, cat, date, type, amount].join(",");
+    });
+    const csv = "\uFEFF" + [header, ...rows].join("\n");
+    const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = filename;
+    a.click();
+    URL.revokeObjectURL(url);
+  }
+
   if (!ready) return null;
 
   const userInitial = userName ? userName.charAt(0).toUpperCase() : "U";
@@ -359,6 +425,60 @@ export default function DashboardPage() {
   const flowIncomePercent = total > 0 ? (summary!.totalIncome / total) * 100 : 50;
   const flowExpensePercent = total > 0 ? (summary!.totalExpense / total) * 100 : 50;
 
+  // Feature 1: MoM comparison
+  const prevMonthIncome = chartData[1]?.income ?? 0;
+  const prevMonthExpense = chartData[1]?.expense ?? 0;
+  const currMonthIncome = chartData[2]?.income ?? summary?.totalIncome ?? 0;
+  const currMonthExpense = chartData[2]?.expense ?? summary?.totalExpense ?? 0;
+  const incomeChangePct = prevMonthIncome > 0
+    ? ((currMonthIncome - prevMonthIncome) / prevMonthIncome) * 100
+    : null;
+  const expenseChangePct = prevMonthExpense > 0
+    ? ((currMonthExpense - prevMonthExpense) / prevMonthExpense) * 100
+    : null;
+
+  // Feature 2: Savings rate
+  const totalIncome = summary?.totalIncome ?? 0;
+  const totalExpense = summary?.totalExpense ?? 0;
+  const savingsRate = totalIncome > 0
+    ? ((totalIncome - totalExpense) / totalIncome) * 100
+    : null;
+
+  // Feature 3: Days remaining
+  const now = new Date();
+  const lastDayOfMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate();
+  const daysRemaining = lastDayOfMonth - now.getDate();
+  const balance = summary?.balance ?? 0;
+  const dailyAvailable = daysRemaining > 0 ? balance / daysRemaining : balance;
+
+  // Feature 4: Budget alert
+  const budgetRatio = totalIncome > 0 ? totalExpense / totalIncome : 0;
+  const showBudgetAlert = budgetRatio >= 0.8 && !budgetAlertDismissed && !!summary;
+
+  // Feature 5: Active goals (not complete)
+  const activeGoals = goals
+    .filter((g) => {
+      const pct = Math.min((Number(g.currentAmount) / Number(g.targetAmount)) * 100, 100);
+      return pct < 100;
+    })
+    .slice(0, 3);
+
+  // Feature 6: Top 3 expense categories
+  const categoryExpenses: { name: string; value: number; color: string }[] = categories.map((cat, i) => ({
+    name: cat.name,
+    value: (summary?.transactions ?? [])
+      .filter((tx) => tx.type === "expense" && tx.categoryId === cat.id)
+      .reduce((s, tx) => s + Number(tx.amount), 0),
+    color: CHART_COLORS[i % CHART_COLORS.length],
+  })).filter((c) => c.value > 0).sort((a, b) => b.value - a.value).slice(0, 3);
+
+  const maxCatExpense = categoryExpenses.length > 0 ? categoryExpenses[0].value : 1;
+
+  // Feature 7: Last 5 transactions
+  const last5Transactions = [...(summary?.transactions ?? [])]
+    .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
+    .slice(0, 5);
+
   const C_PX0 = 60, C_PY0 = 32, C_PW = 444, C_PH = 144;
   const C_PY1 = C_PY0 + C_PH;
   const C_GW = C_PW / 3;
@@ -369,6 +489,49 @@ export default function DashboardPage() {
     : 1;
   const chartBarH = (v: number) => Math.max((v / chartMaxVal) * C_PH, v > 0 ? 3 : 0);
   const chartBarY = (v: number) => C_PY1 - chartBarH(v);
+
+  // Annual chart dimensions
+  const A_PX0 = 50, A_PY0 = 20, A_PW = 480, A_PH = 140;
+  const A_PY1 = A_PY0 + A_PH;
+  const A_GW = A_PW / 12;
+  const A_BW = 10, A_BG = 3;
+  const A_IP = (A_GW - A_BW * 2 - A_BG) / 2;
+  const annualMaxVal = annualData.length > 0
+    ? Math.max(...annualData.map((m) => Math.max(m.income, m.expense)), 1)
+    : 1;
+  const annualBarH = (v: number) => Math.max((v / annualMaxVal) * A_PH, v > 0 ? 2 : 0);
+  const annualBarY = (v: number) => A_PY1 - annualBarH(v);
+
+  // Feature 8: Daily balance line chart
+  const currentMonthTxs = (summary?.transactions ?? []).filter((tx) => {
+    const d = new Date(tx.date.split("T")[0] + "T12:00:00");
+    return d.getFullYear() === now.getFullYear() && d.getMonth() === now.getMonth();
+  });
+  const daysInMonth = lastDayOfMonth;
+  const dailyBalances: number[] = [];
+  let cumBalance = 0;
+  for (let day = 1; day <= daysInMonth; day++) {
+    const dayTxs = currentMonthTxs.filter((tx) => {
+      const d = new Date(tx.date.split("T")[0] + "T12:00:00");
+      return d.getDate() === day;
+    });
+    cumBalance += dayTxs.reduce((s, tx) => s + (tx.type === "income" ? Number(tx.amount) : -Number(tx.amount)), 0);
+    dailyBalances.push(cumBalance);
+  }
+
+  const L_PX0 = 60, L_PY0 = 20, L_PW = 460, L_PH = 140;
+  const L_PY1 = L_PY0 + L_PH;
+  const lineMinVal = Math.min(...dailyBalances, 0);
+  const lineMaxVal = Math.max(...dailyBalances, 1);
+  const lineRange = lineMaxVal - lineMinVal || 1;
+  const lineX = (day: number) => L_PX0 + ((day - 1) / Math.max(daysInMonth - 1, 1)) * L_PW;
+  const lineY = (val: number) => L_PY1 - ((val - lineMinVal) / lineRange) * L_PH;
+
+  // Build SVG path for line chart
+  const linePath = dailyBalances.map((v, i) => `${i === 0 ? "M" : "L"} ${lineX(i + 1).toFixed(1)} ${lineY(v).toFixed(1)}`).join(" ");
+  const areaPath = dailyBalances.length > 0
+    ? `${linePath} L ${lineX(daysInMonth).toFixed(1)} ${L_PY1} L ${lineX(1).toFixed(1)} ${L_PY1} Z`
+    : "";
 
   // Dados para gráfico de pizza (despesas por categoria)
   const pieData = [
@@ -465,9 +628,41 @@ export default function DashboardPage() {
           </p>
         </div>
 
+        {/* Feature 4: Budget Alert */}
+        {showBudgetAlert && (
+          <div className={`relative flex items-start gap-3 rounded-2xl border px-4 py-3.5 ${
+            budgetRatio >= 1
+              ? "bg-red-50 dark:bg-red-950/30 border-red-200 dark:border-red-900/50"
+              : "bg-orange-50 dark:bg-orange-950/30 border-orange-200 dark:border-orange-900/50"
+          }`}>
+            <span className="text-lg leading-none mt-0.5">⚠️</span>
+            <p className={`text-sm font-medium flex-1 ${
+              budgetRatio >= 1
+                ? "text-red-700 dark:text-red-400"
+                : "text-orange-700 dark:text-orange-400"
+            }`}>
+              Atenção: suas despesas estão em {(budgetRatio * 100).toFixed(0)}% da renda este mês
+            </p>
+            <button
+              onClick={() => setBudgetAlertDismissed(true)}
+              className={`shrink-0 p-1 rounded-lg transition-colors ${
+                budgetRatio >= 1
+                  ? "text-red-400 hover:text-red-600 hover:bg-red-100 dark:hover:bg-red-900/40"
+                  : "text-orange-400 hover:text-orange-600 hover:bg-orange-100 dark:hover:bg-orange-900/40"
+              }`}
+              title="Fechar"
+            >
+              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            </button>
+          </div>
+        )}
+
         {/* Cards de resumo */}
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
 
+          {/* Receitas */}
           <div className="group relative bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 p-5 shadow-sm hover:shadow-md hover:-translate-y-0.5 transition-all duration-200 overflow-hidden">
             <div className="absolute top-0 left-0 w-full h-0.5 bg-gradient-to-r from-emerald-400 to-emerald-600 rounded-t-2xl" />
             <div className="flex items-center justify-between mb-4">
@@ -481,6 +676,13 @@ export default function DashboardPage() {
             <p className="text-2xl font-bold text-slate-900 dark:text-white tabular-nums">
               {summary ? formatCurrency(summary.totalIncome) : "R$ 0,00"}
             </p>
+            {/* Feature 1: MoM comparison */}
+            {incomeChangePct !== null && (
+              <div className={`flex items-center gap-1 mt-1.5 ${incomeChangePct >= 0 ? "text-emerald-600 dark:text-emerald-400" : "text-red-500 dark:text-red-400"}`}>
+                <span className="text-sm font-semibold">{incomeChangePct >= 0 ? "↑" : "↓"}</span>
+                <span className="text-xs font-semibold">{Math.abs(incomeChangePct).toFixed(1)}% vs mês anterior</span>
+              </div>
+            )}
             <div className="mt-3">
               <div className="h-1.5 bg-slate-100 dark:bg-slate-800 rounded-full overflow-hidden">
                 <div className="h-full bg-emerald-500 rounded-full transition-all duration-700" style={{ width: `${incomeBarPercent}%` }} />
@@ -491,6 +693,7 @@ export default function DashboardPage() {
             </div>
           </div>
 
+          {/* Despesas */}
           <div className="group relative bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 p-5 shadow-sm hover:shadow-md hover:-translate-y-0.5 transition-all duration-200 overflow-hidden">
             <div className="absolute top-0 left-0 w-full h-0.5 bg-gradient-to-r from-red-400 to-red-600 rounded-t-2xl" />
             <div className="flex items-center justify-between mb-4">
@@ -504,6 +707,13 @@ export default function DashboardPage() {
             <p className="text-2xl font-bold text-slate-900 dark:text-white tabular-nums">
               {summary ? formatCurrency(summary.totalExpense) : "R$ 0,00"}
             </p>
+            {/* Feature 1: MoM comparison */}
+            {expenseChangePct !== null && (
+              <div className={`flex items-center gap-1 mt-1.5 ${expenseChangePct <= 0 ? "text-emerald-600 dark:text-emerald-400" : "text-red-500 dark:text-red-400"}`}>
+                <span className="text-sm font-semibold">{expenseChangePct >= 0 ? "↑" : "↓"}</span>
+                <span className="text-xs font-semibold">{Math.abs(expenseChangePct).toFixed(1)}% vs mês anterior</span>
+              </div>
+            )}
             <div className="mt-3">
               <div className="h-1.5 bg-slate-100 dark:bg-slate-800 rounded-full overflow-hidden">
                 <div className="h-full bg-red-500 rounded-full transition-all duration-700" style={{ width: `${expenseBarPercent}%` }} />
@@ -516,6 +726,7 @@ export default function DashboardPage() {
             </div>
           </div>
 
+          {/* Saldo */}
           <div className={`group relative rounded-2xl border p-5 shadow-sm hover:shadow-md hover:-translate-y-0.5 transition-all duration-200 overflow-hidden ${
             !summary || summary.balance >= 0
               ? "bg-gradient-to-br from-emerald-50 via-white to-white dark:from-emerald-950/30 dark:via-slate-900 dark:to-slate-900 border-emerald-200 dark:border-emerald-900/50"
@@ -551,18 +762,84 @@ export default function DashboardPage() {
           </div>
         </div>
 
+        {/* Feature 2 & 3: Taxa de economia e Dias restantes */}
+        {summary && (
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+
+            {/* Feature 2: Savings rate */}
+            <div className="group relative bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 p-5 shadow-sm hover:shadow-md hover:-translate-y-0.5 transition-all duration-200 overflow-hidden">
+              <div className={`absolute top-0 left-0 w-full h-0.5 rounded-t-2xl ${
+                savingsRate !== null && savingsRate >= 0
+                  ? "bg-gradient-to-r from-blue-400 to-blue-600"
+                  : "bg-gradient-to-r from-amber-400 to-amber-600"
+              }`} />
+              <div className="flex items-center justify-between mb-3">
+                <span className="text-xs font-semibold text-slate-400 dark:text-slate-500 uppercase tracking-widest">Taxa de economia</span>
+                <div className={`w-9 h-9 rounded-2xl flex items-center justify-center ${
+                  savingsRate !== null && savingsRate >= 0
+                    ? "bg-blue-50 dark:bg-blue-900/30"
+                    : "bg-amber-50 dark:bg-amber-900/30"
+                }`}>
+                  {/* Piggy bank icon */}
+                  <svg className={`w-4 h-4 ${savingsRate !== null && savingsRate >= 0 ? "text-blue-600 dark:text-blue-400" : "text-amber-600 dark:text-amber-400"}`} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M17 9V7a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2m2 4h10a2 2 0 002-2v-6a2 2 0 00-2-2H9a2 2 0 00-2 2v6a2 2 0 002 2zm7-5a2 2 0 11-4 0 2 2 0 014 0z" />
+                  </svg>
+                </div>
+              </div>
+              {savingsRate !== null ? (
+                <>
+                  <p className={`text-2xl font-bold tabular-nums ${savingsRate >= 0 ? "text-blue-600 dark:text-blue-400" : "text-amber-600 dark:text-amber-400"}`}>
+                    {Math.abs(savingsRate).toFixed(1)}%
+                  </p>
+                  <p className="text-xs text-slate-500 dark:text-slate-400 mt-1.5">
+                    {savingsRate >= 0
+                      ? `Você economizou ${savingsRate.toFixed(1)}% da renda este mês`
+                      : `Déficit de ${Math.abs(savingsRate).toFixed(1)}% neste mês`}
+                  </p>
+                </>
+              ) : (
+                <p className="text-sm text-slate-400 dark:text-slate-500 mt-1">Sem receitas no período</p>
+              )}
+            </div>
+
+            {/* Feature 3: Days remaining */}
+            <div className="group relative bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 p-5 shadow-sm hover:shadow-md hover:-translate-y-0.5 transition-all duration-200 overflow-hidden">
+              <div className="absolute top-0 left-0 w-full h-0.5 bg-gradient-to-r from-violet-400 to-violet-600 rounded-t-2xl" />
+              <div className="flex items-center justify-between mb-3">
+                <span className="text-xs font-semibold text-slate-400 dark:text-slate-500 uppercase tracking-widest">Dias restantes</span>
+                <div className="w-9 h-9 rounded-2xl bg-violet-50 dark:bg-violet-900/30 flex items-center justify-center">
+                  <svg className="w-4 h-4 text-violet-600 dark:text-violet-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                  </svg>
+                </div>
+              </div>
+              <p className="text-2xl font-bold tabular-nums text-violet-600 dark:text-violet-400">
+                {daysRemaining} dias
+              </p>
+              <p className="text-xs text-slate-500 dark:text-slate-400 mt-1.5">
+                {daysRemaining > 0
+                  ? `Faltam ${daysRemaining} dias • ${formatCurrency(dailyAvailable)}/dia disponível`
+                  : `Último dia do mês • Saldo: ${formatCurrency(balance)}`}
+              </p>
+            </div>
+          </div>
+        )}
+
         {/* Gráfico com toggle */}
         <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 p-5 shadow-sm">
           <div className="flex items-center justify-between mb-4 flex-wrap gap-3">
             <div>
               <p className="text-sm font-semibold text-slate-800 dark:text-slate-200">
-                {chartView === "bar" ? "Histórico mensal" : "Despesas por categoria"}
+                {chartView === "bar" ? "Histórico mensal" : chartView === "pie" ? "Despesas por categoria" : chartView === "line" ? "Saldo diário" : "Resumo anual"}
               </p>
               <p className="text-xs text-slate-400 dark:text-slate-500 mt-0.5">
-                {chartView === "bar" ? "Receitas e despesas — últimos 3 meses" : "Distribuição das despesas por categoria"}
+                {chartView === "bar" ? "Receitas e despesas — últimos 3 meses"
+                  : chartView === "pie" ? "Distribuição das despesas por categoria"
+                  : chartView === "line" ? `Evolução do saldo — ${MONTHS_FULL[now.getMonth()]} ${now.getFullYear()}`
+                  : `Receitas e despesas — ${now.getFullYear()}`}
               </p>
             </div>
-            <div className="flex items-center gap-1">
+            <div className="flex items-center gap-1 flex-wrap">
               <button
                 onClick={() => setChartView("bar")}
                 className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition ${
@@ -583,7 +860,27 @@ export default function DashboardPage() {
               >
                 Por categoria
               </button>
-              {chartView === "bar" && (
+              <button
+                onClick={() => setChartView("line")}
+                className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition ${
+                  chartView === "line"
+                    ? "bg-orange-100 dark:bg-orange-900/30 text-orange-600 dark:text-orange-400"
+                    : "text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800"
+                }`}
+              >
+                Linha
+              </button>
+              <button
+                onClick={() => setChartView("annual")}
+                className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition ${
+                  chartView === "annual"
+                    ? "bg-orange-100 dark:bg-orange-900/30 text-orange-600 dark:text-orange-400"
+                    : "text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800"
+                }`}
+              >
+                Anual
+              </button>
+              {(chartView === "bar" || chartView === "annual") && (
                 <div className="flex items-center gap-3 ml-2">
                   <div className="flex items-center gap-1.5 text-xs text-slate-500 dark:text-slate-400">
                     <span className="w-2.5 h-2.5 rounded-[3px] bg-emerald-500" />Receitas
@@ -596,74 +893,194 @@ export default function DashboardPage() {
             </div>
           </div>
 
-          {chartLoading ? (
-            <div className="h-40 flex items-center justify-center">
-              <div className="w-8 h-8 border-2 border-orange-400 border-t-transparent rounded-full"
-                style={{ animation: "spin 0.8s linear infinite" }} />
-            </div>
-          ) : chartView === "pie" ? (
-            <DonutChart data={pieData} darkMode={darkMode} />
-          ) : chartData.every((m) => m.income === 0 && m.expense === 0) ? (
-            <div className="h-40 flex items-center justify-center">
-              <p className="text-sm text-slate-400 dark:text-slate-500">Nenhuma movimentação nos últimos 3 meses</p>
-            </div>
-          ) : (
-            <svg viewBox="0 0 520 216" className="w-full select-none" onMouseLeave={() => setHoveredBar(null)}>
-              {[1, 0.5, 0].map((ratio) => {
-                const gy = C_PY1 - ratio * C_PH;
-                return (
-                  <g key={ratio}>
-                    <line x1={C_PX0} y1={gy} x2={C_PX0 + C_PW + 16} y2={gy}
-                      stroke={darkMode ? "#1e293b" : "#f1f5f9"}
-                      strokeWidth={ratio === 0 ? 1.5 : 1}
+          {/* Bar chart */}
+          {chartView === "bar" && (
+            chartLoading ? (
+              <div className="h-40 flex items-center justify-center">
+                <div className="w-8 h-8 border-2 border-orange-400 border-t-transparent rounded-full"
+                  style={{ animation: "spin 0.8s linear infinite" }} />
+              </div>
+            ) : chartData.every((m) => m.income === 0 && m.expense === 0) ? (
+              <div className="h-40 flex items-center justify-center">
+                <p className="text-sm text-slate-400 dark:text-slate-500">Nenhuma movimentação nos últimos 3 meses</p>
+              </div>
+            ) : (
+              <svg viewBox="0 0 520 216" className="w-full select-none" onMouseLeave={() => setHoveredBar(null)}>
+                {[1, 0.5, 0].map((ratio) => {
+                  const gy = C_PY1 - ratio * C_PH;
+                  return (
+                    <g key={ratio}>
+                      <line x1={C_PX0} y1={gy} x2={C_PX0 + C_PW + 16} y2={gy}
+                        stroke={darkMode ? "#1e293b" : "#f1f5f9"}
+                        strokeWidth={ratio === 0 ? 1.5 : 1}
+                      />
+                      <text x={C_PX0 - 6} y={gy + 4} textAnchor="end" fontSize={9} fill={darkMode ? "#475569" : "#94a3b8"}>
+                        {formatShort(chartMaxVal * ratio)}
+                      </text>
+                    </g>
+                  );
+                })}
+                {chartData.map((month, i) => {
+                  const gx = C_PX0 + i * C_GW;
+                  const ix = gx + C_IP;
+                  const ex = ix + C_BW + C_BG;
+                  const ih = chartBarH(month.income);
+                  const eh = chartBarH(month.expense);
+                  const dimIncome = hoveredBar !== null && !(hoveredBar.monthIdx === i && hoveredBar.type === "income");
+                  const dimExpense = hoveredBar !== null && !(hoveredBar.monthIdx === i && hoveredBar.type === "expense");
+                  return (
+                    <g key={month.label}>
+                      <rect x={ix} y={chartBarY(month.income)} width={C_BW} height={ih} rx={4}
+                        fill="#10b981" fillOpacity={dimIncome ? 0.3 : 0.85}
+                        style={{ cursor: "default", transition: "fill-opacity 0.15s" }}
+                        onMouseEnter={() => setHoveredBar({ monthIdx: i, x: ix + C_BW / 2, y: chartBarY(month.income), value: month.income, type: "income" })}
+                      />
+                      <rect x={ex} y={chartBarY(month.expense)} width={C_BW} height={eh} rx={4}
+                        fill="#ef4444" fillOpacity={dimExpense ? 0.3 : 0.85}
+                        style={{ cursor: "default", transition: "fill-opacity 0.15s" }}
+                        onMouseEnter={() => setHoveredBar({ monthIdx: i, x: ex + C_BW / 2, y: chartBarY(month.expense), value: month.expense, type: "expense" })}
+                      />
+                      <text x={gx + C_GW / 2} y={C_PY1 + 18} textAnchor="middle" fontSize={10} fontWeight="500" fill={darkMode ? "#94a3b8" : "#64748b"}>
+                        {month.label}
+                      </text>
+                    </g>
+                  );
+                })}
+                {hoveredBar && (
+                  <g style={{ pointerEvents: "none" }}>
+                    <rect x={hoveredBar.x - 38} y={hoveredBar.y - 32} width={76} height={22} rx={5}
+                      fill={darkMode ? "#f1f5f9" : "#1e293b"} fillOpacity={0.95}
                     />
-                    <text x={C_PX0 - 6} y={gy + 4} textAnchor="end" fontSize={9} fill={darkMode ? "#475569" : "#94a3b8"}>
-                      {formatShort(chartMaxVal * ratio)}
+                    <text x={hoveredBar.x} y={hoveredBar.y - 16} textAnchor="middle" fontSize={10} fontWeight="600"
+                      fill={darkMode ? "#1e293b" : "#f1f5f9"}
+                    >
+                      {formatShort(hoveredBar.value)}
                     </text>
                   </g>
-                );
-              })}
+                )}
+              </svg>
+            )
+          )}
 
-              {chartData.map((month, i) => {
-                const gx = C_PX0 + i * C_GW;
-                const ix = gx + C_IP;
-                const ex = ix + C_BW + C_BG;
-                const ih = chartBarH(month.income);
-                const eh = chartBarH(month.expense);
-                const dimIncome = hoveredBar !== null && !(hoveredBar.monthIdx === i && hoveredBar.type === "income");
-                const dimExpense = hoveredBar !== null && !(hoveredBar.monthIdx === i && hoveredBar.type === "expense");
-                return (
-                  <g key={month.label}>
-                    <rect x={ix} y={chartBarY(month.income)} width={C_BW} height={ih} rx={4}
-                      fill="#10b981" fillOpacity={dimIncome ? 0.3 : 0.85}
-                      style={{ cursor: "default", transition: "fill-opacity 0.15s" }}
-                      onMouseEnter={() => setHoveredBar({ monthIdx: i, x: ix + C_BW / 2, y: chartBarY(month.income), value: month.income, type: "income" })}
-                    />
-                    <rect x={ex} y={chartBarY(month.expense)} width={C_BW} height={eh} rx={4}
-                      fill="#ef4444" fillOpacity={dimExpense ? 0.3 : 0.85}
-                      style={{ cursor: "default", transition: "fill-opacity 0.15s" }}
-                      onMouseEnter={() => setHoveredBar({ monthIdx: i, x: ex + C_BW / 2, y: chartBarY(month.expense), value: month.expense, type: "expense" })}
-                    />
-                    <text x={gx + C_GW / 2} y={C_PY1 + 18} textAnchor="middle" fontSize={10} fontWeight="500" fill={darkMode ? "#94a3b8" : "#64748b"}>
-                      {month.label}
-                    </text>
-                  </g>
-                );
-              })}
+          {/* Pie chart */}
+          {chartView === "pie" && (
+            chartLoading ? (
+              <div className="h-40 flex items-center justify-center">
+                <div className="w-8 h-8 border-2 border-orange-400 border-t-transparent rounded-full"
+                  style={{ animation: "spin 0.8s linear infinite" }} />
+              </div>
+            ) : (
+              <DonutChart data={pieData} darkMode={darkMode} />
+            )
+          )}
 
-              {hoveredBar && (
-                <g style={{ pointerEvents: "none" }}>
-                  <rect x={hoveredBar.x - 38} y={hoveredBar.y - 32} width={76} height={22} rx={5}
-                    fill={darkMode ? "#f1f5f9" : "#1e293b"} fillOpacity={0.95}
+          {/* Feature 8: Line chart */}
+          {chartView === "line" && (
+            txLoading ? (
+              <div className="h-40 flex items-center justify-center">
+                <div className="w-8 h-8 border-2 border-orange-400 border-t-transparent rounded-full"
+                  style={{ animation: "spin 0.8s linear infinite" }} />
+              </div>
+            ) : dailyBalances.every((v) => v === 0) ? (
+              <div className="h-40 flex items-center justify-center">
+                <p className="text-sm text-slate-400 dark:text-slate-500">Nenhuma movimentação neste mês</p>
+              </div>
+            ) : (
+              <svg viewBox={`0 0 ${L_PX0 + L_PW + 20} ${L_PY0 + L_PH + 30}`} className="w-full select-none">
+                {/* Grid lines */}
+                {[0, 0.25, 0.5, 0.75, 1].map((ratio) => {
+                  const val = lineMinVal + ratio * lineRange;
+                  const gy = lineY(val);
+                  return (
+                    <g key={ratio}>
+                      <line x1={L_PX0} y1={gy} x2={L_PX0 + L_PW} y2={gy}
+                        stroke={darkMode ? "#1e293b" : "#f1f5f9"} strokeWidth={1} strokeDasharray="4 2"
+                      />
+                      <text x={L_PX0 - 6} y={gy + 4} textAnchor="end" fontSize={9} fill={darkMode ? "#475569" : "#94a3b8"}>
+                        {formatShort(val)}
+                      </text>
+                    </g>
+                  );
+                })}
+                {/* Zero line */}
+                {lineMinVal < 0 && lineMaxVal > 0 && (
+                  <line x1={L_PX0} y1={lineY(0)} x2={L_PX0 + L_PW} y2={lineY(0)}
+                    stroke={darkMode ? "#475569" : "#cbd5e1"} strokeWidth={1.5}
                   />
-                  <text x={hoveredBar.x} y={hoveredBar.y - 16} textAnchor="middle" fontSize={10} fontWeight="600"
-                    fill={darkMode ? "#1e293b" : "#f1f5f9"}
-                  >
-                    {formatShort(hoveredBar.value)}
+                )}
+                {/* X axis labels */}
+                {[1, Math.ceil(daysInMonth / 4), Math.ceil(daysInMonth / 2), Math.ceil(daysInMonth * 3 / 4), daysInMonth].map((day) => (
+                  <text key={day} x={lineX(day)} y={L_PY1 + 18} textAnchor="middle" fontSize={9} fill={darkMode ? "#94a3b8" : "#64748b"}>
+                    {day}
                   </text>
-                </g>
-              )}
-            </svg>
+                ))}
+                {/* Area fill */}
+                {areaPath && (
+                  <path d={areaPath} fill={balance >= 0 ? "#10b981" : "#ef4444"} fillOpacity={0.1} />
+                )}
+                {/* Line */}
+                {linePath && (
+                  <path d={linePath} fill="none" stroke={balance >= 0 ? "#10b981" : "#ef4444"} strokeWidth={2} strokeLinejoin="round" />
+                )}
+                {/* Points */}
+                {dailyBalances.map((v, i) => (
+                  <circle key={i} cx={lineX(i + 1)} cy={lineY(v)} r={2.5}
+                    fill={v >= 0 ? "#10b981" : "#ef4444"} stroke={darkMode ? "#0f172a" : "#fff"} strokeWidth={1.5}
+                  />
+                ))}
+              </svg>
+            )
+          )}
+
+          {/* Feature 9: Annual chart */}
+          {chartView === "annual" && (
+            annualLoading ? (
+              <div className="h-40 flex items-center justify-center">
+                <div className="w-8 h-8 border-2 border-orange-400 border-t-transparent rounded-full"
+                  style={{ animation: "spin 0.8s linear infinite" }} />
+              </div>
+            ) : annualData.every((m) => m.income === 0 && m.expense === 0) ? (
+              <div className="h-40 flex items-center justify-center">
+                <p className="text-sm text-slate-400 dark:text-slate-500">Nenhuma movimentação em {now.getFullYear()}</p>
+              </div>
+            ) : (
+              <svg viewBox={`0 0 ${A_PX0 + A_PW + 20} ${A_PY0 + A_PH + 26}`} className="w-full select-none">
+                {[1, 0.5, 0].map((ratio) => {
+                  const gy = A_PY1 - ratio * A_PH;
+                  return (
+                    <g key={ratio}>
+                      <line x1={A_PX0} y1={gy} x2={A_PX0 + A_PW + 10} y2={gy}
+                        stroke={darkMode ? "#1e293b" : "#f1f5f9"}
+                        strokeWidth={ratio === 0 ? 1.5 : 1}
+                      />
+                      <text x={A_PX0 - 6} y={gy + 4} textAnchor="end" fontSize={8} fill={darkMode ? "#475569" : "#94a3b8"}>
+                        {formatShort(annualMaxVal * ratio)}
+                      </text>
+                    </g>
+                  );
+                })}
+                {annualData.map((month, i) => {
+                  const gx = A_PX0 + i * A_GW;
+                  const ix = gx + A_IP;
+                  const ex = ix + A_BW + A_BG;
+                  const ih = annualBarH(month.income);
+                  const eh = annualBarH(month.expense);
+                  return (
+                    <g key={month.label}>
+                      <rect x={ix} y={annualBarY(month.income)} width={A_BW} height={ih} rx={3}
+                        fill="#10b981" fillOpacity={0.85}
+                      />
+                      <rect x={ex} y={annualBarY(month.expense)} width={A_BW} height={eh} rx={3}
+                        fill="#ef4444" fillOpacity={0.85}
+                      />
+                      <text x={gx + A_GW / 2} y={A_PY1 + 14} textAnchor="middle" fontSize={8} fontWeight="500" fill={darkMode ? "#94a3b8" : "#64748b"}>
+                        {month.label}
+                      </text>
+                    </g>
+                  );
+                })}
+              </svg>
+            )
           )}
         </div>
 
@@ -705,6 +1122,126 @@ export default function DashboardPage() {
                 <p className="text-xs text-slate-400 dark:text-slate-500">{summary.balance >= 0 ? "positivo" : "negativo"}</p>
               </div>
             </div>
+          </div>
+        )}
+
+        {/* Feature 5: Widget de Metas no overview */}
+        {activeGoals.length > 0 && (
+          <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 p-5 shadow-sm">
+            <div className="flex items-center justify-between mb-4">
+              <p className="text-xs font-semibold text-slate-400 dark:text-slate-500 uppercase tracking-widest">
+                Metas em andamento
+              </p>
+              <button
+                onClick={() => setTab("goals")}
+                className="text-xs font-semibold text-orange-500 dark:text-orange-400 hover:text-orange-600 dark:hover:text-orange-300 transition-colors"
+              >
+                Ver todas →
+              </button>
+            </div>
+            <div className="space-y-3">
+              {activeGoals.map((goal) => {
+                const current = Number(goal.currentAmount);
+                const target = Number(goal.targetAmount);
+                const pct = Math.min((current / target) * 100, 100);
+                const barColor = pct >= 75 ? "bg-emerald-500" : pct >= 40 ? "bg-amber-400" : "bg-red-400";
+                return (
+                  <div key={goal.id} className="flex items-center gap-3">
+                    <div className="w-8 h-8 rounded-xl bg-orange-50 dark:bg-orange-900/20 flex items-center justify-center shrink-0">
+                      <svg className="w-4 h-4 text-orange-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                      </svg>
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center justify-between mb-1">
+                        <span className="text-sm font-medium text-slate-700 dark:text-slate-300 truncate">{goal.name}</span>
+                        <span className="text-xs font-bold text-slate-500 dark:text-slate-400 ml-2 shrink-0">{pct.toFixed(0)}%</span>
+                      </div>
+                      <div className="h-1.5 bg-slate-100 dark:bg-slate-800 rounded-full overflow-hidden">
+                        <div className={`h-full rounded-full transition-all duration-700 ${barColor}`} style={{ width: `${pct}%` }} />
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
+
+        {/* Feature 6 & 7: Top 3 gastos e Últimas 5 movimentações */}
+        {(categoryExpenses.length > 0 || last5Transactions.length > 0) && (
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+
+            {/* Feature 6: Top 3 expense categories */}
+            {categoryExpenses.length > 0 && (
+              <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 p-5 shadow-sm">
+                <p className="text-xs font-semibold text-slate-400 dark:text-slate-500 uppercase tracking-widest mb-4">
+                  Maiores gastos
+                </p>
+                <div className="space-y-3">
+                  {categoryExpenses.map((cat, idx) => (
+                    <div key={cat.name}>
+                      <div className="flex items-center justify-between mb-1.5">
+                        <div className="flex items-center gap-2">
+                          <span className="text-xs font-bold text-slate-400 dark:text-slate-500 w-4">#{idx + 1}</span>
+                          <span className="text-sm font-medium text-slate-700 dark:text-slate-300">{cat.name}</span>
+                        </div>
+                        <span className="text-sm font-bold text-red-500 dark:text-red-400 tabular-nums">
+                          {formatCurrency(cat.value)}
+                        </span>
+                      </div>
+                      <div className="h-2 bg-slate-100 dark:bg-slate-800 rounded-full overflow-hidden">
+                        <div
+                          className="h-full rounded-full transition-all duration-700"
+                          style={{ width: `${(cat.value / maxCatExpense) * 100}%`, backgroundColor: cat.color }}
+                        />
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Feature 7: Last 5 transactions */}
+            {last5Transactions.length > 0 && (
+              <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 p-5 shadow-sm">
+                <div className="flex items-center justify-between mb-4">
+                  <p className="text-xs font-semibold text-slate-400 dark:text-slate-500 uppercase tracking-widest">
+                    Últimas movimentações
+                  </p>
+                  <button
+                    onClick={() => setTab("transactions")}
+                    className="text-xs font-semibold text-orange-500 dark:text-orange-400 hover:text-orange-600 dark:hover:text-orange-300 transition-colors"
+                  >
+                    Ver todas →
+                  </button>
+                </div>
+                <div className="space-y-2.5">
+                  {last5Transactions.map((tx) => (
+                    <div key={tx.id} className="flex items-center gap-3">
+                      <div className={`w-8 h-8 rounded-xl flex items-center justify-center shrink-0 ${
+                        tx.type === "income"
+                          ? "bg-emerald-50 dark:bg-emerald-900/20"
+                          : "bg-red-50 dark:bg-red-900/20"
+                      }`}>
+                        <svg className={`w-4 h-4 ${tx.type === "income" ? "text-emerald-500" : "text-red-500"}`} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                          {tx.type === "income"
+                            ? <path strokeLinecap="round" strokeLinejoin="round" d="M7 11l5-5m0 0l5 5m-5-5v12" />
+                            : <path strokeLinecap="round" strokeLinejoin="round" d="M17 13l-5 5m0 0l-5-5m5 5V6" />}
+                        </svg>
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-medium text-slate-700 dark:text-slate-300 truncate">{tx.description}</p>
+                        <p className="text-xs text-slate-400 dark:text-slate-500">{formatDate(tx.date)}</p>
+                      </div>
+                      <span className={`text-sm font-bold tabular-nums shrink-0 ${tx.type === "income" ? "text-emerald-600 dark:text-emerald-400" : "text-red-500 dark:text-red-400"}`}>
+                        {tx.type === "income" ? "+" : "-"}{formatCurrency(Number(tx.amount))}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
           </div>
         )}
 
@@ -777,15 +1314,30 @@ export default function DashboardPage() {
                 />
               </div>
 
-              <button
-                onClick={() => { setEditingTx(null); setTxModal(true); }}
-                className="flex items-center gap-2 bg-orange-500 hover:bg-orange-600 active:scale-95 text-white px-4 py-2 rounded-xl text-sm font-semibold transition-all shadow-sm shadow-orange-500/25"
-              >
-                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" />
-                </svg>
-                Nova movimentação
-              </button>
+              <div className="flex items-center gap-2">
+                {/* Feature 10: Export CSV */}
+                {summary && summary.transactions.length > 0 && (
+                  <button
+                    onClick={exportToCSV}
+                    className="flex items-center gap-2 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 hover:border-orange-400 dark:hover:border-orange-500 hover:text-orange-600 dark:hover:text-orange-400 text-slate-600 dark:text-slate-300 px-3 py-2 rounded-xl text-sm font-semibold transition-all shadow-sm"
+                  >
+                    <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                    </svg>
+                    Exportar CSV
+                  </button>
+                )}
+
+                <button
+                  onClick={() => { setEditingTx(null); setTxModal(true); }}
+                  className="flex items-center gap-2 bg-orange-500 hover:bg-orange-600 active:scale-95 text-white px-4 py-2 rounded-xl text-sm font-semibold transition-all shadow-sm shadow-orange-500/25"
+                >
+                  <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" />
+                  </svg>
+                  Nova movimentação
+                </button>
+              </div>
             </div>
 
             <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 overflow-hidden shadow-sm">
