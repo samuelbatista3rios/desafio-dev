@@ -58,6 +58,16 @@ const TAB_LABELS: Record<Tab, string> = {
 
 const MONTHS_PT = ["Jan", "Fev", "Mar", "Abr", "Mai", "Jun", "Jul", "Ago", "Set", "Out", "Nov", "Dez"];
 
+function getDefaultMonthFilters(): TransactionFilters {
+  const now = new Date();
+  const y = now.getFullYear();
+  const m = now.getMonth();
+  return {
+    startDate: new Date(y, m, 1).toISOString().split("T")[0],
+    endDate: new Date(y, m + 1, 0).toISOString().split("T")[0],
+  };
+}
+
 interface MonthlyData {
   label: string;
   income: number;
@@ -96,8 +106,8 @@ export default function DashboardPage() {
   const [darkMode, setDarkMode] = useState(false);
 
   const [summary, setSummary] = useState<TransactionSummary | null>(null);
-  const [filters, setFilters] = useState<TransactionFilters>({});
-  const filtersRef = useRef<TransactionFilters>({});
+  const [filters, setFilters] = useState<TransactionFilters>(getDefaultMonthFilters);
+  const filtersRef = useRef<TransactionFilters>(getDefaultMonthFilters());
   const [txModal, setTxModal] = useState(false);
   const [editingTx, setEditingTx] = useState<Transaction | null>(null);
   const [txLoading, setTxLoading] = useState(true);
@@ -161,7 +171,7 @@ export default function DashboardPage() {
 
   useEffect(() => {
     if (!ready) return;
-    fetchTransactions({});
+    fetchTransactions(filtersRef.current);
     fetchCategories();
     fetchChartData();
     fetchGoals();

@@ -43,3 +43,16 @@ CREATE TABLE transactions (
 CREATE INDEX idx_transactions_user ON transactions("userId");
 CREATE INDEX idx_transactions_date ON transactions(date);
 CREATE INDEX idx_categories_user ON categories("userId");
+
+CREATE TABLE goals (
+  id              UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  name            VARCHAR(255) NOT NULL,
+  "targetAmount"  NUMERIC(12, 2) NOT NULL,
+  "currentAmount" NUMERIC(12, 2) NOT NULL DEFAULT 0,
+  deadline        DATE,
+  "userId"        UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  "createdAt"     TIMESTAMP NOT NULL DEFAULT now(),
+  "updatedAt"     TIMESTAMP NOT NULL DEFAULT now()
+);
+
+CREATE INDEX idx_goals_user ON goals("userId");
