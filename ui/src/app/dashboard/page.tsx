@@ -1634,6 +1634,11 @@ export default function DashboardPage() {
                   const isExpired = goal.deadline && new Date(goal.deadline) < new Date();
                   const isPending = pendingGoalIds.has(goal.id);
                   const barColor = isComplete ? "bg-emerald-500" : pct >= 50 ? "bg-amber-400" : "bg-red-400";
+                  const remaining = Math.max(0, target - current);
+                  const monthsLeft = goal.deadline
+                    ? (new Date(goal.deadline + "T12:00:00").getTime() - new Date().getTime()) / (1000 * 60 * 60 * 24 * 30.4375)
+                    : null;
+                  const monthlyNeeded = !isComplete && monthsLeft !== null && monthsLeft > 0 ? remaining / monthsLeft : null;
 
                   return (
                     <div
@@ -1696,6 +1701,17 @@ export default function DashboardPage() {
                           />
                         </div>
                       </div>
+
+                      {monthlyNeeded !== null && (
+                        <div className="mb-3 flex items-center gap-2 bg-blue-50 dark:bg-blue-900/20 border border-blue-100 dark:border-blue-900/40 rounded-xl px-3 py-2">
+                          <svg className="w-3.5 h-3.5 text-blue-500 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                          </svg>
+                          <p className="text-xs text-blue-700 dark:text-blue-300">
+                            Deposite <span className="font-bold">{formatCurrency(monthlyNeeded)}/mês</span> para alcançar no prazo
+                          </p>
+                        </div>
+                      )}
 
                       <div className="flex items-center justify-between">
                         <div>
