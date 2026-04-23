@@ -1,7 +1,9 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import {
+  IsBoolean,
   IsDateString,
   IsEnum,
+  IsIn,
   IsNotEmpty,
   IsNumber,
   IsOptional,
@@ -39,4 +41,14 @@ export class CreateTransactionDto {
   @IsOptional()
   @IsUUID('4', { message: 'ID de categoria inválido' })
   categoryId?: string;
+
+  @ApiPropertyOptional({ example: true })
+  @IsOptional()
+  @IsBoolean()
+  isRecurring?: boolean;
+
+  @ApiPropertyOptional({ example: 'monthly', enum: ['monthly', 'weekly', 'yearly'] })
+  @IsOptional()
+  @IsIn(['monthly', 'weekly', 'yearly'])
+  recurringFrequency?: string;
 }

@@ -117,6 +117,12 @@ export default function TransactionCard({ transaction: tx, onEdit, onDelete, pen
                 {tx.category.name}
               </span>
             )}
+            {tx.isRecurring && (
+              <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md bg-violet-50 dark:bg-violet-900/20 text-violet-600 dark:text-violet-400 text-[10px] font-medium border border-violet-200 dark:border-violet-800/50">
+                <svg className="w-2.5 h-2.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}><path strokeLinecap="round" strokeLinejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" /></svg>
+                {tx.recurringFrequency === "monthly" ? "Mensal" : tx.recurringFrequency === "weekly" ? "Semanal" : "Anual"}
+              </span>
+            )}
             {pending && (
               <span className="text-xs text-amber-500 font-medium">A ser removido...</span>
             )}

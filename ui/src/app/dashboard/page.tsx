@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import {
   ApiError,
@@ -58,6 +58,29 @@ const TAB_LABELS: Record<Tab, string> = {
 
 const MONTHS_PT = ["Jan", "Fev", "Mar", "Abr", "Mai", "Jun", "Jul", "Ago", "Set", "Out", "Nov", "Dez"];
 const MONTHS_FULL = ["Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho", "Julho", "Agosto", "Setembro", "Outubro", "Novembro", "Dezembro"];
+
+function useCountUp(target: number, duration = 700): number {
+  const [value, setValue] = useState(0);
+  const rafRef = useRef<number>(0);
+  const prevRef = useRef(0);
+  useEffect(() => {
+    cancelAnimationFrame(rafRef.current);
+    const from = prevRef.current;
+    prevRef.current = target;
+    const startTime = performance.now();
+    function tick(now: number) {
+      const elapsed = now - startTime;
+      const progress = Math.min(elapsed / duration, 1);
+      const eased = 1 - Math.pow(1 - progress, 3);
+      setValue(from + (target - from) * eased);
+      if (progress < 1) rafRef.current = requestAnimationFrame(tick);
+      else setValue(target);
+    }
+    rafRef.current = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(rafRef.current);
+  }, [target, duration]);
+  return value;
+}
 
 function getDefaultMonthFilters(): TransactionFilters {
   const now = new Date();
@@ -181,6 +204,8 @@ export default function DashboardPage() {
 
   useEffect(() => {
     if (!ready) return;
+    const n = new Date();
+    transactionsApi.applyRecurring(n.getFullYear(), n.getMonth() + 1).catch(() => {});
     fetchTransactions(filtersRef.current);
     fetchCategories();
     fetchChartData();
@@ -188,6 +213,19 @@ export default function DashboardPage() {
     fetchAnnualData();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [ready]);
+
+  useEffect(() => {
+    function onKey(e: KeyboardEvent) {
+      const tag = (e.target as HTMLElement).tagName;
+      if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT") return;
+      if (e.key === "n" || e.key === "N") {
+        setEditingTx(null);
+        setTxModal(true);
+      }
+    }
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, []);
 
   async function fetchTransactions(f: TransactionFilters) {
     setTxLoading(true);
@@ -462,6 +500,12 @@ export default function DashboardPage() {
   const balance = summary?.balance ?? 0;
   const dailyAvailable = daysRemaining > 0 ? balance / daysRemaining : balance;
 
+  // Projeção de fim de mês
+  const daysElapsed = isCurrentMonth ? now.getDate() : (isFutureMonth && !isCurrentMonth ? 0 : lastDayOfMonth);
+  const dailyExpenseRate = daysElapsed > 0 ? totalExpense / daysElapsed : 0;
+  const projectedExpense = dailyExpenseRate * lastDayOfMonth;
+  const projectedBalance = totalIncome - projectedExpense;
+
   // Feature 4: Budget alert
   const budgetRatio = totalIncome > 0 ? totalExpense / totalIncome : 0;
   const showBudgetAlert = budgetRatio >= 0.8 && !budgetAlertDismissed && !!summary;
@@ -577,6 +621,11 @@ export default function DashboardPage() {
     });
   })();
 
+  // Count-up hooks para os cards
+  const animatedIncome = useCountUp(totalIncome);
+  const animatedExpense = useCountUp(totalExpense);
+  const animatedBalance = useCountUp(balance);
+
   return (
     <div className="min-h-screen bg-slate-50 dark:bg-[#0c0e14] transition-colors duration-300">
 
@@ -679,8 +728,25 @@ export default function DashboardPage() {
           </div>
         )}
 
+        {/* Skeleton dos cards no primeiro carregamento */}
+        {txLoading && !summary && (
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+            {[...Array(3)].map((_, i) => (
+              <div key={i} className="relative bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 p-5 shadow-sm overflow-hidden">
+                <div className="absolute top-0 left-0 w-full h-0.5 bg-slate-200 dark:bg-slate-700 rounded-t-2xl" />
+                <div className="flex items-center justify-between mb-4">
+                  <div className="h-3 w-20 bg-slate-200 dark:bg-slate-700 rounded animate-pulse" />
+                  <div className="w-9 h-9 rounded-2xl bg-slate-200 dark:bg-slate-700 animate-pulse" />
+                </div>
+                <div className="h-7 w-36 bg-slate-200 dark:bg-slate-700 rounded animate-pulse mb-3" />
+                <div className="h-2.5 w-24 bg-slate-100 dark:bg-slate-800 rounded animate-pulse" />
+              </div>
+            ))}
+          </div>
+        )}
+
         {/* Cards de resumo */}
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+        <div className={`grid grid-cols-1 sm:grid-cols-3 gap-4 ${txLoading && !summary ? "hidden" : ""}`}>
 
           {/* Receitas */}
           <div className="group relative bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 p-5 shadow-sm hover:shadow-md hover:-translate-y-0.5 transition-all duration-200 overflow-hidden">
@@ -694,7 +760,7 @@ export default function DashboardPage() {
               </div>
             </div>
             <p className="text-2xl font-bold text-slate-900 dark:text-white tabular-nums">
-              {summary ? formatCurrency(summary.totalIncome) : "R$ 0,00"}
+              {formatCurrency(animatedIncome)}
             </p>
             {/* Feature 1: MoM comparison */}
             {incomeChangePct !== null && (
@@ -725,7 +791,7 @@ export default function DashboardPage() {
               </div>
             </div>
             <p className="text-2xl font-bold text-slate-900 dark:text-white tabular-nums">
-              {summary ? formatCurrency(summary.totalExpense) : "R$ 0,00"}
+              {formatCurrency(animatedExpense)}
             </p>
             {/* Feature 1: MoM comparison */}
             {expenseChangePct !== null && (
@@ -770,15 +836,23 @@ export default function DashboardPage() {
             <p className={`text-2xl font-bold tabular-nums ${
               !summary || summary.balance >= 0 ? "text-emerald-700 dark:text-emerald-400" : "text-red-600 dark:text-red-400"
             }`}>
-              {summary ? formatCurrency(summary.balance) : "R$ 0,00"}
+              {formatCurrency(animatedBalance)}
             </p>
-            <p className="text-xs text-slate-400 dark:text-slate-500 mt-4">
+            <p className="text-xs text-slate-400 dark:text-slate-500 mt-1">
               {!summary || summary.balance === 0
                 ? "Nenhuma movimentação registrada"
                 : summary.balance > 0
                   ? "Fluxo positivo neste periodo"
                   : "Fluxo negativo neste periodo"}
             </p>
+            {isCurrentMonth && summary && totalIncome > 0 && daysElapsed > 0 && daysElapsed < lastDayOfMonth && (
+              <p className="text-xs text-slate-400 dark:text-slate-500 mt-1.5">
+                Projeção fim do mês:{" "}
+                <span className={`font-semibold ${projectedBalance >= 0 ? "text-emerald-500 dark:text-emerald-400" : "text-red-500 dark:text-red-400"}`}>
+                  {formatCurrency(projectedBalance)}
+                </span>
+              </p>
+            )}
           </div>
         </div>
 
@@ -1470,11 +1544,20 @@ export default function DashboardPage() {
 
             <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 overflow-hidden shadow-sm">
               {txLoading ? (
-                <div className="py-20 text-center">
-                  <div className="w-9 h-9 border-2 border-orange-400 border-t-transparent rounded-full mx-auto mb-3"
-                    style={{ animation: "spin 0.8s linear infinite" }}
-                  />
-                  <p className="text-sm text-slate-400 dark:text-slate-500">Carregando movimentações...</p>
+                <div className="divide-y divide-slate-100 dark:divide-slate-800">
+                  {[...Array(5)].map((_, i) => (
+                    <div key={i} className="flex items-center gap-4 px-5 py-4">
+                      <div className="w-1 h-9 rounded-full bg-slate-200 dark:bg-slate-700 animate-pulse shrink-0" />
+                      <div className="flex-1 space-y-2">
+                        <div className="h-3.5 bg-slate-200 dark:bg-slate-700 rounded animate-pulse" style={{ width: `${50 + (i * 13) % 35}%` }} />
+                        <div className="h-2.5 bg-slate-100 dark:bg-slate-800 rounded animate-pulse w-1/4" />
+                      </div>
+                      <div className="hidden sm:block h-6 w-20 bg-slate-100 dark:bg-slate-800 rounded-lg animate-pulse" />
+                      <div className="hidden md:block h-3 w-20 bg-slate-100 dark:bg-slate-800 rounded animate-pulse" />
+                      <div className="hidden sm:block h-6 w-16 bg-slate-100 dark:bg-slate-800 rounded-lg animate-pulse" />
+                      <div className="h-4 w-20 bg-slate-200 dark:bg-slate-700 rounded animate-pulse ml-auto" />
+                    </div>
+                  ))}
                 </div>
               ) : !summary || summary.transactions.length === 0 ? (
                 <div className="py-16 flex flex-col items-center">
@@ -1566,7 +1649,15 @@ export default function DashboardPage() {
                               <div className="flex items-center gap-3">
                                 <div className={`w-1 h-9 rounded-full shrink-0 ${tx.type === "income" ? "bg-emerald-400" : "bg-red-400"}`} />
                                 <div>
-                                  <p className="font-medium text-slate-800 dark:text-slate-200">{tx.description}</p>
+                                  <div className="flex items-center gap-1.5 flex-wrap">
+                                    <p className="font-medium text-slate-800 dark:text-slate-200">{tx.description}</p>
+                                    {tx.isRecurring && (
+                                      <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md bg-violet-50 dark:bg-violet-900/20 text-violet-600 dark:text-violet-400 text-[10px] font-medium border border-violet-200 dark:border-violet-800/50">
+                                        <svg className="w-2.5 h-2.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}><path strokeLinecap="round" strokeLinejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" /></svg>
+                                        {tx.recurringFrequency === "monthly" ? "Mensal" : tx.recurringFrequency === "weekly" ? "Semanal" : "Anual"}
+                                      </span>
+                                    )}
+                                  </div>
                                   {tx.notes && (
                                     <p className="text-xs text-slate-400 dark:text-slate-500 mt-0.5 truncate max-w-[200px]">{tx.notes}</p>
                                   )}
@@ -1578,7 +1669,11 @@ export default function DashboardPage() {
                             </td>
                             <td className="px-5 py-4 hidden sm:table-cell">
                               {tx.category?.name ? (
-                                <span className="inline-flex items-center px-2.5 py-1 rounded-lg bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 text-xs font-medium border border-slate-200 dark:border-slate-700">
+                                <span
+                                  onClick={() => updateFilters({ ...filtersRef.current, categoryId: tx.categoryId })}
+                                  className="inline-flex items-center px-2.5 py-1 rounded-lg bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 text-xs font-medium border border-slate-200 dark:border-slate-700 cursor-pointer hover:bg-orange-50 hover:border-orange-300 hover:text-orange-600 dark:hover:bg-orange-900/20 dark:hover:border-orange-700 dark:hover:text-orange-400 transition-colors"
+                                  title="Filtrar por esta categoria"
+                                >
                                   {tx.category.name}
                                 </span>
                               ) : (

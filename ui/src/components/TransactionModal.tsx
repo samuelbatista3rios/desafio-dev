@@ -24,6 +24,8 @@ const emptyForm: CreateTransactionPayload = {
   date: new Date().toISOString().split("T")[0],
   notes: "",
   categoryId: "",
+  isRecurring: false,
+  recurringFrequency: "monthly",
 };
 
 export default function TransactionModal({
@@ -47,6 +49,8 @@ export default function TransactionModal({
         date: editing.date.split("T")[0],
         notes: editing.notes || "",
         categoryId: editing.categoryId || "",
+        isRecurring: editing.isRecurring ?? false,
+        recurringFrequency: editing.recurringFrequency ?? "monthly",
       });
     } else {
       setForm(emptyForm);
@@ -64,6 +68,8 @@ export default function TransactionModal({
       amount: Number(form.amount),
       categoryId: form.categoryId || undefined,
       notes: form.notes || undefined,
+      isRecurring: form.isRecurring ?? false,
+      recurringFrequency: form.isRecurring ? (form.recurringFrequency || "monthly") : undefined,
     };
 
     try {
@@ -248,7 +254,42 @@ export default function TransactionModal({
             />
           </div>
 
-    
+          {/* Recorrência */}
+          <div className="rounded-xl border border-slate-200 dark:border-slate-600/50 overflow-hidden">
+            <button
+              type="button"
+              onClick={() => setForm({ ...form, isRecurring: !form.isRecurring })}
+              className="w-full flex items-center justify-between px-4 py-3 bg-slate-50 dark:bg-slate-900/60 hover:bg-slate-100 dark:hover:bg-slate-800/60 transition"
+            >
+              <div className="flex items-center gap-2.5">
+                <svg className="w-4 h-4 text-violet-500 dark:text-violet-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                </svg>
+                <span className="text-sm font-medium text-slate-700 dark:text-slate-300">Transação recorrente</span>
+              </div>
+              <div className={`w-9 h-5 rounded-full transition-colors relative ${form.isRecurring ? "bg-violet-500" : "bg-slate-300 dark:bg-slate-600"}`}>
+                <div className={`absolute top-0.5 w-4 h-4 rounded-full bg-white shadow transition-transform ${form.isRecurring ? "translate-x-4" : "translate-x-0.5"}`} />
+              </div>
+            </button>
+            {form.isRecurring && (
+              <div className="px-4 py-3 border-t border-slate-200 dark:border-slate-600/50 bg-white dark:bg-slate-800">
+                <label className="block text-xs font-medium text-slate-500 dark:text-slate-400 mb-2">Frequência</label>
+                <div className="grid grid-cols-3 gap-2">
+                  {([["monthly", "Mensal"], ["weekly", "Semanal"], ["yearly", "Anual"]] as const).map(([val, label]) => (
+                    <button
+                      key={val}
+                      type="button"
+                      onClick={() => setForm({ ...form, recurringFrequency: val })}
+                      className={`py-1.5 rounded-lg text-xs font-medium transition ${form.recurringFrequency === val ? "bg-violet-500 text-white" : "bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-600"}`}
+                    >
+                      {label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+
           <div className="flex gap-3 pt-1">
             <button
               type="button"

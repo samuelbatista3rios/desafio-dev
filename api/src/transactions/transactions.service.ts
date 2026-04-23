@@ -108,4 +108,59 @@ export class TransactionsService {
     const transaction = await this.findOne(id, userId);
     await this.transactionsRepository.remove(transaction);
   }
+
+  async applyRecurring(userId: string, year: number, month: number): Promise<{ created: number }> {
+    const prevYear = month === 1 ? year - 1 : year;
+    const prevMonth = month === 1 ? 12 : month - 1;
+    const prevStart = `${prevYear}-${String(prevMonth).padStart(2, '0')}-01`;
+    const lastDayPrev = new Date(prevYear, prevMonth, 0).getDate();
+    const prevEnd = `${prevYear}-${String(prevMonth).padStart(2, '0')}-${lastDayPrev}`;
+
+    const recurring = await this.transactionsRepository
+      .createQueryBuilder('t')
+      .where('t.userId = :userId', { userId })
+      .andWhere('t.isRecurring = true')
+      .andWhere('t.date >= :start', { start: prevStart })
+      .andWhere('t.date <= :end', { end: prevEnd })
+      .getMany();
+
+    const targetStart = `${year}-${String(month).padStart(2, '0')}-01`;
+    const lastDayTarget = new Date(year, month, 0).getDate();
+    const targetEnd = `${year}-${String(month).padStart(2, '0')}-${lastDayTarget}`;
+
+    const existing = await this.transactionsRepository
+      .createQueryBuilder('t')
+      .where('t.userId = :userId', { userId })
+      .andWhere('t.isRecurring = true')
+      .andWhere('t.date >= :start', { start: targetStart })
+      .andWhere('t.date <= :end', { end: targetEnd })
+      .select('t.description')
+      .getMany();
+
+    const existingDescriptions = new Set(existing.map((t) => t.description));
+    let created = 0;
+
+    for (const tx of recurring) {
+      if (existingDescriptions.has(tx.description)) continue;
+      const origDay = new Date(tx.date).getUTCDate();
+      const day = Math.min(origDay, lastDayTarget);
+      const date = `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+      await this.transactionsRepository.save(
+        this.transactionsRepository.create({
+          userId,
+          description: tx.description,
+          amount: tx.amount,
+          type: tx.type,
+          categoryId: tx.categoryId,
+          notes: tx.notes,
+          isRecurring: true,
+          recurringFrequency: tx.recurringFrequency,
+          date,
+        }),
+      );
+      created++;
+    }
+
+    return { created };
+  }
 }
