@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState, useCallback } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import {
   ApiError,
@@ -59,28 +59,6 @@ const TAB_LABELS: Record<Tab, string> = {
 const MONTHS_PT = ["Jan", "Fev", "Mar", "Abr", "Mai", "Jun", "Jul", "Ago", "Set", "Out", "Nov", "Dez"];
 const MONTHS_FULL = ["Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho", "Julho", "Agosto", "Setembro", "Outubro", "Novembro", "Dezembro"];
 
-function useCountUp(target: number, duration = 700): number {
-  const [value, setValue] = useState(0);
-  const rafRef = useRef<number>(0);
-  const prevRef = useRef(0);
-  useEffect(() => {
-    cancelAnimationFrame(rafRef.current);
-    const from = prevRef.current;
-    prevRef.current = target;
-    const startTime = performance.now();
-    function tick(now: number) {
-      const elapsed = now - startTime;
-      const progress = Math.min(elapsed / duration, 1);
-      const eased = 1 - Math.pow(1 - progress, 3);
-      setValue(from + (target - from) * eased);
-      if (progress < 1) rafRef.current = requestAnimationFrame(tick);
-      else setValue(target);
-    }
-    rafRef.current = requestAnimationFrame(tick);
-    return () => cancelAnimationFrame(rafRef.current);
-  }, [target, duration]);
-  return value;
-}
 
 function getDefaultMonthFilters(): TransactionFilters {
   const now = new Date();
@@ -621,11 +599,6 @@ export default function DashboardPage() {
     });
   })();
 
-  // Count-up hooks para os cards
-  const animatedIncome = useCountUp(totalIncome);
-  const animatedExpense = useCountUp(totalExpense);
-  const animatedBalance = useCountUp(balance);
-
   return (
     <div className="min-h-screen bg-slate-50 dark:bg-[#0c0e14] transition-colors duration-300">
 
@@ -760,7 +733,7 @@ export default function DashboardPage() {
               </div>
             </div>
             <p className="text-2xl font-bold text-slate-900 dark:text-white tabular-nums">
-              {formatCurrency(animatedIncome)}
+              {formatCurrency(totalIncome)}
             </p>
             {/* Feature 1: MoM comparison */}
             {incomeChangePct !== null && (
@@ -791,7 +764,7 @@ export default function DashboardPage() {
               </div>
             </div>
             <p className="text-2xl font-bold text-slate-900 dark:text-white tabular-nums">
-              {formatCurrency(animatedExpense)}
+              {formatCurrency(totalExpense)}
             </p>
             {/* Feature 1: MoM comparison */}
             {expenseChangePct !== null && (
@@ -836,7 +809,7 @@ export default function DashboardPage() {
             <p className={`text-2xl font-bold tabular-nums ${
               !summary || summary.balance >= 0 ? "text-emerald-700 dark:text-emerald-400" : "text-red-600 dark:text-red-400"
             }`}>
-              {formatCurrency(animatedBalance)}
+              {formatCurrency(balance)}
             </p>
             <p className="text-xs text-slate-400 dark:text-slate-500 mt-1">
               {!summary || summary.balance === 0
