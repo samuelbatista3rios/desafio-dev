@@ -446,10 +446,19 @@ export default function DashboardPage() {
     ? ((totalIncome - totalExpense) / totalIncome) * 100
     : null;
 
-  // Feature 3: Days remaining
+  // Feature 3: Days remaining — baseado no mês do filtro
   const now = new Date();
-  const lastDayOfMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate();
-  const daysRemaining = lastDayOfMonth - now.getDate();
+  const filterDate = filters.startDate ? new Date(filters.startDate + "T12:00:00") : now;
+  const filterYear = filterDate.getFullYear();
+  const filterMonth = filterDate.getMonth();
+  const lastDayOfMonth = new Date(filterYear, filterMonth + 1, 0).getDate();
+  const isCurrentMonth = filterYear === now.getFullYear() && filterMonth === now.getMonth();
+  const isFutureMonth = filterDate > new Date(now.getFullYear(), now.getMonth(), 1);
+  const daysRemaining = isFutureMonth && !isCurrentMonth
+    ? lastDayOfMonth
+    : isCurrentMonth
+      ? lastDayOfMonth - now.getDate() + 1
+      : 0;
   const balance = summary?.balance ?? 0;
   const dailyAvailable = daysRemaining > 0 ? balance / daysRemaining : balance;
 
@@ -830,7 +839,9 @@ export default function DashboardPage() {
               <p className="text-xs text-slate-500 dark:text-slate-400 mt-1.5">
                 {daysRemaining > 0
                   ? `Faltam ${daysRemaining} dias • ${formatCurrency(dailyAvailable)}/dia disponível`
-                  : `Último dia do mês • Saldo: ${formatCurrency(balance)}`}
+                  : isCurrentMonth
+                    ? `Último dia do mês • Saldo: ${formatCurrency(balance)}`
+                    : `Mês encerrado • Saldo final: ${formatCurrency(balance)}`}
               </p>
             </div>
           </div>
