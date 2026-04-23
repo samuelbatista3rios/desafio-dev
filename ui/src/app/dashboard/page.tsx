@@ -145,6 +145,8 @@ export default function DashboardPage() {
   const [budgetAlertDismissed, setBudgetAlertDismissed] = useState(false);
 
   const [searchQuery, setSearchQuery] = useState("");
+  const [sortField, setSortField] = useState<"date" | "amount" | "description">("date");
+  const [sortDir, setSortDir] = useState<"desc" | "asc">("desc");
 
   // Undo delete
   const pendingDeletesRef = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map());
@@ -550,12 +552,21 @@ export default function DashboardPage() {
     })()),
   ];
 
-  // Transações filtradas pela busca
-  const displayedTransactions = searchQuery.trim()
-    ? (summary?.transactions ?? []).filter((tx) =>
-        tx.description.toLowerCase().includes(searchQuery.toLowerCase())
-      )
-    : (summary?.transactions ?? []);
+  // Transações filtradas pela busca e ordenadas
+  const displayedTransactions = (() => {
+    const base = searchQuery.trim()
+      ? (summary?.transactions ?? []).filter((tx) =>
+          tx.description.toLowerCase().includes(searchQuery.toLowerCase())
+        )
+      : (summary?.transactions ?? []);
+    return [...base].sort((a, b) => {
+      let cmp = 0;
+      if (sortField === "date") cmp = a.date.localeCompare(b.date);
+      else if (sortField === "amount") cmp = Number(a.amount) - Number(b.amount);
+      else if (sortField === "description") cmp = a.description.localeCompare(b.description);
+      return sortDir === "asc" ? cmp : -cmp;
+    });
+  })();
 
   return (
     <div className="min-h-screen bg-slate-50 dark:bg-[#0c0e14] transition-colors duration-300">
@@ -1291,18 +1302,74 @@ export default function DashboardPage() {
                   ))}
                 </select>
 
-                <input
-                  type="date"
-                  value={filters.startDate || ""}
-                  onChange={(e) => updateFilters({ ...filtersRef.current, startDate: e.target.value || undefined })}
-                  className="px-3 py-2 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl text-sm text-slate-700 dark:text-slate-300 focus:outline-none focus:ring-2 focus:ring-orange-400/30 focus:border-orange-400 dark:focus:border-orange-500 transition shadow-sm"
-                />
-                <input
-                  type="date"
-                  value={filters.endDate || ""}
-                  onChange={(e) => updateFilters({ ...filtersRef.current, endDate: e.target.value || undefined })}
-                  className="px-3 py-2 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl text-sm text-slate-700 dark:text-slate-300 focus:outline-none focus:ring-2 focus:ring-orange-400/30 focus:border-orange-400 dark:focus:border-orange-500 transition shadow-sm"
-                />
+                <div className="flex items-center gap-1">
+                  <button
+                    onClick={() => {
+                      const cur = filters.startDate ? new Date(filters.startDate + "T12:00:00") : new Date();
+                      const y = cur.getFullYear();
+                      const m = cur.getMonth(); // vai para mês anterior
+                      updateFilters({
+                        ...filtersRef.current,
+                        startDate: new Date(y, m - 1, 1).toISOString().split("T")[0],
+                        endDate: new Date(y, m, 0).toISOString().split("T")[0],
+                      });
+                    }}
+                    className="p-2 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 hover:border-orange-400 dark:hover:border-orange-500 text-slate-500 dark:text-slate-400 hover:text-orange-500 dark:hover:text-orange-400 rounded-xl transition shadow-sm"
+                    title="Mês anterior"
+                  >
+                    <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" />
+                    </svg>
+                  </button>
+
+                  <input
+                    type="month"
+                    value={filters.startDate ? filters.startDate.slice(0, 7) : ""}
+                    onChange={(e) => {
+                      const [y, m] = e.target.value.split("-").map(Number);
+                      if (!y || !m) return;
+                      updateFilters({
+                        ...filtersRef.current,
+                        startDate: new Date(y, m - 1, 1).toISOString().split("T")[0],
+                        endDate: new Date(y, m, 0).toISOString().split("T")[0],
+                      });
+                    }}
+                    className="px-3 py-2 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl text-sm text-slate-700 dark:text-slate-300 focus:outline-none focus:ring-2 focus:ring-orange-400/30 focus:border-orange-400 dark:focus:border-orange-500 transition shadow-sm"
+                  />
+
+                  <button
+                    onClick={() => {
+                      const cur = filters.startDate ? new Date(filters.startDate + "T12:00:00") : new Date();
+                      const y = cur.getFullYear();
+                      const m = cur.getMonth() + 2; // vai para próximo mês
+                      updateFilters({
+                        ...filtersRef.current,
+                        startDate: new Date(y, m - 1, 1).toISOString().split("T")[0],
+                        endDate: new Date(y, m, 0).toISOString().split("T")[0],
+                      });
+                    }}
+                    className="p-2 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 hover:border-orange-400 dark:hover:border-orange-500 text-slate-500 dark:text-slate-400 hover:text-orange-500 dark:hover:text-orange-400 rounded-xl transition shadow-sm"
+                    title="Próximo mês"
+                  >
+                    <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
+                    </svg>
+                  </button>
+
+                  {(() => {
+                    const def = getDefaultMonthFilters();
+                    const isCurrentMonth = filters.startDate === def.startDate && filters.endDate === def.endDate;
+                    return !isCurrentMonth ? (
+                      <button
+                        onClick={() => updateFilters({ ...filtersRef.current, ...getDefaultMonthFilters() })}
+                        className="px-3 py-2 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 hover:border-orange-400 dark:hover:border-orange-500 text-slate-500 dark:text-slate-400 hover:text-orange-500 dark:hover:text-orange-400 rounded-xl text-xs font-medium transition shadow-sm whitespace-nowrap"
+                        title="Voltar ao mês atual"
+                      >
+                        Mês atual
+                      </button>
+                    ) : null;
+                  })()}
+                </div>
 
                 {/* Busca por descrição */}
                 <input
@@ -1339,6 +1406,56 @@ export default function DashboardPage() {
                 </button>
               </div>
             </div>
+
+            {!txLoading && displayedTransactions.length > 0 && (() => {
+              const totalIncome = displayedTransactions.filter(t => t.type === "income").reduce((s, t) => s + Number(t.amount), 0);
+              const totalExpense = displayedTransactions.filter(t => t.type === "expense").reduce((s, t) => s + Number(t.amount), 0);
+              const balance = totalIncome - totalExpense;
+              return (
+                <div className="flex flex-wrap items-center justify-between gap-3">
+                  <div className="flex flex-wrap gap-3">
+                    <div className="flex items-center gap-2 px-3 py-1.5 rounded-xl bg-emerald-50 dark:bg-emerald-900/20 border border-emerald-200 dark:border-emerald-900/40">
+                      <span className="text-xs text-emerald-600 dark:text-emerald-400 font-medium">Receitas</span>
+                      <span className="text-xs font-bold text-emerald-700 dark:text-emerald-300 tabular-nums">+{formatCurrency(totalIncome)}</span>
+                    </div>
+                    <div className="flex items-center gap-2 px-3 py-1.5 rounded-xl bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-900/40">
+                      <span className="text-xs text-red-500 dark:text-red-400 font-medium">Despesas</span>
+                      <span className="text-xs font-bold text-red-600 dark:text-red-300 tabular-nums">-{formatCurrency(totalExpense)}</span>
+                    </div>
+                    <div className={`flex items-center gap-2 px-3 py-1.5 rounded-xl border ${balance >= 0 ? "bg-blue-50 dark:bg-blue-900/20 border-blue-200 dark:border-blue-900/40" : "bg-orange-50 dark:bg-orange-900/20 border-orange-200 dark:border-orange-900/40"}`}>
+                      <span className={`text-xs font-medium ${balance >= 0 ? "text-blue-600 dark:text-blue-400" : "text-orange-600 dark:text-orange-400"}`}>Saldo</span>
+                      <span className={`text-xs font-bold tabular-nums ${balance >= 0 ? "text-blue-700 dark:text-blue-300" : "text-orange-700 dark:text-orange-300"}`}>{balance >= 0 ? "+" : ""}{formatCurrency(balance)}</span>
+                    </div>
+                    <span className="text-xs text-slate-400 dark:text-slate-500 self-center">{displayedTransactions.length} movimentação{displayedTransactions.length !== 1 ? "ões" : ""}</span>
+                  </div>
+                  {(filters.type || filters.categoryId || searchQuery.trim()) && (
+                    <button
+                      onClick={() => { setSearchQuery(""); updateFilters({ startDate: filtersRef.current.startDate, endDate: filtersRef.current.endDate }); }}
+                      className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-medium text-slate-500 dark:text-slate-400 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 hover:border-orange-400 hover:text-orange-500 dark:hover:text-orange-400 transition shadow-sm"
+                    >
+                      <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+                      </svg>
+                      Limpar filtros
+                    </button>
+                  )}
+                </div>
+              );
+            })()}
+            {!txLoading && displayedTransactions.length === 0 && (filters.type || filters.categoryId || searchQuery.trim()) && (
+              <div className="flex items-center justify-between">
+                <p className="text-xs text-slate-400 dark:text-slate-500">Nenhuma movimentação encontrada</p>
+                <button
+                  onClick={() => { setSearchQuery(""); updateFilters({ startDate: filtersRef.current.startDate, endDate: filtersRef.current.endDate }); }}
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-medium text-slate-500 dark:text-slate-400 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 hover:border-orange-400 hover:text-orange-500 transition shadow-sm"
+                >
+                  <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                  Limpar filtros
+                </button>
+              </div>
+            )}
 
             <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 overflow-hidden shadow-sm">
               {txLoading ? (
@@ -1392,16 +1509,44 @@ export default function DashboardPage() {
                     <table className="w-full text-sm">
                       <thead>
                         <tr className="border-b border-slate-100 dark:border-slate-800 bg-slate-50/60 dark:bg-slate-800/40">
-                          <th className="text-left px-5 py-3 text-xs font-semibold text-slate-400 dark:text-slate-500 uppercase tracking-widest">Descrição</th>
-                          <th className="text-left px-5 py-3 text-xs font-semibold text-slate-400 dark:text-slate-500 uppercase tracking-widest hidden sm:table-cell">Categoria</th>
-                          <th className="text-left px-5 py-3 text-xs font-semibold text-slate-400 dark:text-slate-500 uppercase tracking-widest hidden md:table-cell">Data</th>
-                          <th className="text-left px-5 py-3 text-xs font-semibold text-slate-400 dark:text-slate-500 uppercase tracking-widest hidden sm:table-cell">Tipo</th>
-                          <th className="text-right px-5 py-3 text-xs font-semibold text-slate-400 dark:text-slate-500 uppercase tracking-widest">Valor</th>
+                          {([
+                            { key: "description", label: "Descrição", align: "left", cls: "" },
+                            { key: null, label: "Categoria", align: "left", cls: "hidden sm:table-cell" },
+                            { key: "date", label: "Data", align: "left", cls: "hidden md:table-cell" },
+                            { key: null, label: "Tipo", align: "left", cls: "hidden sm:table-cell" },
+                            { key: "amount", label: "Valor", align: "right", cls: "" },
+                          ] as { key: "date" | "amount" | "description" | null; label: string; align: string; cls: string }[]).map(({ key, label, align, cls }) => (
+                            <th
+                              key={label}
+                              onClick={key ? () => { if (sortField === key) setSortDir(d => d === "asc" ? "desc" : "asc"); else { setSortField(key); setSortDir("desc"); } } : undefined}
+                              className={`px-5 py-3 text-xs font-semibold text-slate-400 dark:text-slate-500 uppercase tracking-widest ${align === "right" ? "text-right" : "text-left"} ${cls} ${key ? "cursor-pointer hover:text-orange-500 dark:hover:text-orange-400 select-none transition-colors" : ""}`}
+                            >
+                              <span className="inline-flex items-center gap-1">
+                                {label}
+                                {key && sortField === key && (
+                                  <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+                                    <path strokeLinecap="round" strokeLinejoin="round" d={sortDir === "asc" ? "M5 15l7-7 7 7" : "M19 9l-7 7-7-7"} />
+                                  </svg>
+                                )}
+                              </span>
+                            </th>
+                          ))}
                           <th className="px-3 py-3" />
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
-                        {displayedTransactions.map((tx) => (
+                        {displayedTransactions.reduce<React.ReactNode[]>((rows, tx, i) => {
+                          const prev = displayedTransactions[i - 1];
+                          if (sortField === "date" && (!prev || prev.date !== tx.date)) {
+                            rows.push(
+                              <tr key={`day-${tx.date}`} className="bg-slate-50/80 dark:bg-slate-800/60">
+                                <td colSpan={6} className="px-5 py-2 text-xs font-semibold text-slate-400 dark:text-slate-500 uppercase tracking-widest">
+                                  {formatDate(tx.date)}
+                                </td>
+                              </tr>
+                            );
+                          }
+                          rows.push(
                           <tr
                             key={tx.id}
                             className={`hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors group ${pendingTxIds.has(tx.id) ? "opacity-40 pointer-events-none" : ""}`}
@@ -1471,7 +1616,9 @@ export default function DashboardPage() {
                               </div>
                             </td>
                           </tr>
-                        ))}
+                          );
+                          return rows;
+                        }, [])}
                       </tbody>
                     </table>
                   </div>
