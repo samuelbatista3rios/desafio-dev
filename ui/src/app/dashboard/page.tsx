@@ -182,13 +182,12 @@ export default function DashboardPage() {
 
   useEffect(() => {
     if (!ready) return;
-    const n = new Date();
-    transactionsApi.applyRecurring(n.getFullYear(), n.getMonth() + 1).catch(() => {});
     fetchTransactions(filtersRef.current);
     fetchCategories();
     fetchChartData();
     fetchGoals();
     fetchAnnualData();
+    // applyRecurring: ativar após deploy do backend com suporte a isRecurring
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [ready]);
 

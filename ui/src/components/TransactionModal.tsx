@@ -64,12 +64,12 @@ export default function TransactionModal({
     setLoading(true);
 
     const payload = {
-      ...form,
+      description: form.description,
       amount: Number(form.amount),
+      type: form.type,
+      date: form.date,
       categoryId: form.categoryId || undefined,
       notes: form.notes || undefined,
-      isRecurring: form.isRecurring ?? false,
-      recurringFrequency: form.isRecurring ? (form.recurringFrequency || "monthly") : undefined,
     };
 
     try {
