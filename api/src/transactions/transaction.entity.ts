@@ -52,12 +52,6 @@ export class Transaction {
   @Column({ nullable: true })
   categoryId: string;
 
-  @Column({ default: false })
-  isRecurring: boolean;
-
-  @Column({ nullable: true, type: 'varchar', length: 10 })
-  recurringFrequency: string | null; // 'monthly' | 'weekly' | 'yearly'
-
   @CreateDateColumn()
   createdAt: Date;
 

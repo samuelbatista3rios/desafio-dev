@@ -109,7 +109,7 @@ export class TransactionsService {
     await this.transactionsRepository.remove(transaction);
   }
 
-  async applyRecurring(userId: string, year: number, month: number): Promise<{ created: number }> {
+  async applyRecurringDisabled(userId: string, year: number, month: number): Promise<{ created: number }> {
     const prevYear = month === 1 ? year - 1 : year;
     const prevMonth = month === 1 ? 12 : month - 1;
     const prevStart = `${prevYear}-${String(prevMonth).padStart(2, '0')}-01`;

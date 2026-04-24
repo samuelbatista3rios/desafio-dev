@@ -78,16 +78,6 @@ export class TransactionsController {
     return this.transactionsService.update(id, user.id, updateTransactionDto);
   }
 
-  @Post('apply-recurring')
-  @ApiOperation({ summary: 'Aplicar transações recorrentes do mês anterior ao mês alvo' })
-  applyRecurring(
-    @CurrentUser() user: { id: string },
-    @Query('year') year: string,
-    @Query('month') month: string,
-  ) {
-    return this.transactionsService.applyRecurring(user.id, Number(year), Number(month));
-  }
-
   @Delete(':id')
   @ApiOperation({ summary: 'Remover movimentação' })
   @ApiResponse({ status: 200, description: 'Movimentação removida' })
