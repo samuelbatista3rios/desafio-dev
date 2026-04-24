@@ -120,8 +120,6 @@ export const transactionsApi = {
     }),
   remove: (id: string) =>
     request<void>(`/transactions/${id}`, { method: "DELETE" }),
-  applyRecurring: (year: number, month: number) =>
-    request<{ created: number }>(`/transactions/apply-recurring?year=${year}&month=${month}`, { method: "POST" }),
 };
 
 // Goals
@@ -165,8 +163,6 @@ export interface Transaction {
   category?: Category;
   userId: string;
   createdAt: string;
-  isRecurring?: boolean;
-  recurringFrequency?: string;
 }
 
 export interface TransactionSummary {
@@ -190,8 +186,6 @@ export interface CreateTransactionPayload {
   date: string;
   notes?: string;
   categoryId?: string;
-  isRecurring?: boolean;
-  recurringFrequency?: string;
 }
 
 export interface Goal {
