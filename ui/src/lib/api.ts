@@ -163,6 +163,8 @@ export interface Transaction {
   category?: Category;
   userId: string;
   createdAt: string;
+  isRecurring?: boolean;
+  recurringFrequency?: "monthly" | "weekly" | "yearly";
 }
 
 export interface TransactionSummary {
