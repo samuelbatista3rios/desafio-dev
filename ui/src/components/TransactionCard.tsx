@@ -16,9 +16,11 @@ interface Props {
   onEdit: () => void;
   onDelete: () => void;
   pending?: boolean;
+  isPaid?: boolean;
+  onTogglePaid?: () => void;
 }
 
-export default function TransactionCard({ transaction: tx, onEdit, onDelete, pending }: Props) {
+export default function TransactionCard({ transaction: tx, onEdit, onDelete, pending, isPaid, onTogglePaid }: Props) {
   const [swipeX, setSwipeX] = useState(0);
   const [revealed, setRevealed] = useState(false);
   const touchStartX = useRef(0);
@@ -95,7 +97,7 @@ export default function TransactionCard({ transaction: tx, onEdit, onDelete, pen
 
       {/* Card principal */}
       <div
-        className={`relative bg-white dark:bg-slate-900 px-4 py-3.5 flex items-center gap-3 transition-transform select-none ${pending ? "opacity-40 pointer-events-none" : ""}`}
+        className={`relative bg-white dark:bg-slate-900 px-4 py-3.5 flex items-center gap-3 transition-transform select-none ${pending ? "opacity-40 pointer-events-none" : isPaid ? "opacity-60" : ""}`}
         style={{ transform: `translateX(${swipeX}px)`, transition: directionLocked.current === "horizontal" ? "none" : "transform 0.2s ease" }}
         onTouchStart={handleTouchStart}
         onTouchMove={handleTouchMove}
@@ -128,6 +130,23 @@ export default function TransactionCard({ transaction: tx, onEdit, onDelete, pen
             )}
           </div>
         </div>
+
+        {/* Toggle de pago */}
+        {onTogglePaid && (
+          <button
+            onClick={(e) => { e.stopPropagation(); onTogglePaid(); }}
+            title={isPaid ? "Marcar como não pago" : "Marcar como pago"}
+            className={`w-7 h-7 rounded-full border-2 flex items-center justify-center shrink-0 transition-all ${
+              isPaid
+                ? "bg-emerald-500 border-emerald-500 text-white"
+                : "border-slate-300 dark:border-slate-600 text-transparent"
+            }`}
+          >
+            <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+            </svg>
+          </button>
+        )}
 
         {/* Indicador de swipe */}
         <svg className="w-4 h-4 text-slate-300 dark:text-slate-600 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>

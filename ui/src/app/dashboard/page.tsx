@@ -173,6 +173,28 @@ export default function DashboardPage() {
     }
   }
 
+  // Marca/desmarca todas as movimentações exibidas como pagas
+  async function toggleAllPaid(targetPaid: boolean) {
+    const changed = displayedTransactions.filter((t) => paidIds.has(t.id) !== targetPaid);
+    if (changed.length === 0) return;
+    const prevIds = new Set(paidIds);
+    // Atualização otimista
+    setPaidIds((prev) => {
+      const next = new Set(prev);
+      for (const t of changed) {
+        if (targetPaid) next.add(t.id);
+        else next.delete(t.id);
+      }
+      return next;
+    });
+    try {
+      await Promise.all(changed.map((t) => transactionsApi.setPaid(t.id, targetPaid)));
+    } catch {
+      setPaidIds(prevIds); // reverte tudo
+      showError("Não foi possível atualizar todas as movimentações");
+    }
+  }
+
   // Feature 4: Budget alert
   const [budgetAlertDismissed, setBudgetAlertDismissed] = useState(false);
 
@@ -1512,6 +1534,7 @@ export default function DashboardPage() {
               const totalIncome = displayedTransactions.filter(t => t.type === "income").reduce((s, t) => s + Number(t.amount), 0);
               const totalExpense = displayedTransactions.filter(t => t.type === "expense").reduce((s, t) => s + Number(t.amount), 0);
               const balance = totalIncome - totalExpense;
+              const pendingExpense = displayedTransactions.filter(t => t.type === "expense" && !paidIds.has(t.id)).reduce((s, t) => s + Number(t.amount), 0);
               return (
                 <div className="flex flex-wrap items-center justify-between gap-3">
                   <div className="flex flex-wrap gap-3">
@@ -1527,6 +1550,12 @@ export default function DashboardPage() {
                       <span className={`text-xs font-medium ${balance >= 0 ? "text-blue-600 dark:text-blue-400" : "text-orange-600 dark:text-orange-400"}`}>Saldo</span>
                       <span className={`text-xs font-bold tabular-nums ${balance >= 0 ? "text-blue-700 dark:text-blue-300" : "text-orange-700 dark:text-orange-300"}`}>{balance >= 0 ? "+" : ""}{formatCurrency(balance)}</span>
                     </div>
+                    {pendingExpense > 0 && (
+                      <div className="flex items-center gap-2 px-3 py-1.5 rounded-xl bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-900/40" title="Despesas ainda não pagas">
+                        <span className="text-xs text-amber-600 dark:text-amber-400 font-medium">A pagar</span>
+                        <span className="text-xs font-bold text-amber-700 dark:text-amber-300 tabular-nums">{formatCurrency(pendingExpense)}</span>
+                      </div>
+                    )}
                     <span className="text-xs text-slate-400 dark:text-slate-500 self-center">{displayedTransactions.length} movimentação{displayedTransactions.length !== 1 ? "ões" : ""}</span>
                   </div>
                   {(filters.type || filters.categoryId || searchQuery.trim()) && (
@@ -1610,6 +1639,8 @@ export default function DashboardPage() {
                         onEdit={() => { setEditingTx(tx); setTxModal(true); }}
                         onDelete={() => handleDeleteTransaction(tx.id)}
                         pending={pendingTxIds.has(tx.id)}
+                        isPaid={paidIds.has(tx.id)}
+                        onTogglePaid={() => togglePaid(tx.id)}
                       />
                     ))}
                   </div>
@@ -1632,14 +1663,36 @@ export default function DashboardPage() {
                               onClick={key ? () => { if (sortField === key) setSortDir(d => d === "asc" ? "desc" : "asc"); else { setSortField(key); setSortDir("desc"); } } : undefined}
                               className={`px-5 py-3 text-xs font-semibold text-slate-400 dark:text-slate-500 uppercase tracking-widest ${align === "right" ? "text-right" : align === "center" ? "text-center" : "text-left"} ${cls} ${key ? "cursor-pointer hover:text-orange-500 dark:hover:text-orange-400 select-none transition-colors" : ""}`}
                             >
-                              <span className="inline-flex items-center gap-1">
-                                {label}
-                                {key && sortField === key && (
-                                  <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
-                                    <path strokeLinecap="round" strokeLinejoin="round" d={sortDir === "asc" ? "M5 15l7-7 7 7" : "M19 9l-7 7-7-7"} />
-                                  </svg>
-                                )}
-                              </span>
+                              {label === "Pago" ? (
+                                <span className="inline-flex flex-col items-center gap-1">
+                                  {label}
+                                  <button
+                                    type="button"
+                                    onClick={(e) => { e.stopPropagation(); toggleAllPaid(!(paidStats.count === displayedTransactions.length)); }}
+                                    title={paidStats.count === displayedTransactions.length ? "Desmarcar todas" : "Marcar todas como pagas"}
+                                    className={`w-4 h-4 rounded-[5px] border-2 flex items-center justify-center transition-all ${
+                                      paidStats.count === displayedTransactions.length
+                                        ? "bg-emerald-500 border-emerald-500 text-white"
+                                        : paidStats.count > 0
+                                          ? "bg-emerald-500/30 border-emerald-400 text-emerald-600 dark:text-emerald-400"
+                                          : "border-slate-300 dark:border-slate-600 text-transparent hover:border-emerald-400"
+                                    }`}
+                                  >
+                                    <svg className="w-2.5 h-2.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={4}>
+                                      <path strokeLinecap="round" strokeLinejoin="round" d={paidStats.count === displayedTransactions.length ? "M5 13l4 4L19 7" : "M5 12h14"} />
+                                    </svg>
+                                  </button>
+                                </span>
+                              ) : (
+                                <span className="inline-flex items-center gap-1">
+                                  {label}
+                                  {key && sortField === key && (
+                                    <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+                                      <path strokeLinecap="round" strokeLinejoin="round" d={sortDir === "asc" ? "M5 15l7-7 7 7" : "M19 9l-7 7-7-7"} />
+                                    </svg>
+                                  )}
+                                </span>
+                              )}
                             </th>
                           ))}
                           <th className="px-3 py-3" />
