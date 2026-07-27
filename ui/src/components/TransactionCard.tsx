@@ -78,8 +78,8 @@ export default function TransactionCard({ transaction: tx, onEdit, onDelete, pen
       className="relative overflow-hidden"
       onClick={revealed ? handleClose : undefined}
     >
-      {/* Botões de ação atrás do card */}
-      <div className="absolute inset-y-0 right-0 flex items-center">
+      {/* Botões de ação atrás do card (só aparecem ao arrastar) */}
+      <div className={`absolute inset-y-0 right-0 flex items-center transition-opacity ${swipeX < 0 ? "opacity-100" : "opacity-0 pointer-events-none"}`}>
         <button
           onClick={(e) => { e.stopPropagation(); handleClose(); onEdit(); }}
           className="h-full px-4 bg-orange-500 hover:bg-orange-600 text-white flex items-center justify-center transition-colors"
