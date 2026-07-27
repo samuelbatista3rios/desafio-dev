@@ -20,6 +20,7 @@ export default function CategoryModal({
 }: Props) {
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
+  const [budget, setBudget] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
 
@@ -27,9 +28,11 @@ export default function CategoryModal({
     if (editing) {
       setName(editing.name);
       setDescription(editing.description || "");
+      setBudget(editing.monthlyBudget != null ? String(editing.monthlyBudget) : "");
     } else {
       setName("");
       setDescription("");
+      setBudget("");
     }
     setError("");
   }, [editing, open]);
@@ -39,12 +42,14 @@ export default function CategoryModal({
     setError("");
     setLoading(true);
 
+    const monthlyBudget = budget.trim() ? parseFloat(budget) : null;
+
     try {
       if (editing) {
-        await categoriesApi.update(editing.id, { name, description });
+        await categoriesApi.update(editing.id, { name, description, monthlyBudget });
         onSuccess("Categoria atualizada com sucesso!");
       } else {
-        await categoriesApi.create({ name, description });
+        await categoriesApi.create({ name, description, monthlyBudget });
         onSuccess("Categoria criada com sucesso!");
       }
       onSaved();
@@ -121,6 +126,23 @@ export default function CategoryModal({
               className="w-full px-3.5 py-2.5 border border-slate-200 dark:border-slate-600/50 rounded-xl text-sm text-slate-800 dark:text-white bg-white dark:bg-slate-900/60 placeholder-slate-400 dark:placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-orange-400/40 focus:border-orange-400 dark:focus:border-orange-500/50 transition"
               placeholder="Uma breve descrição..."
             />
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1.5">
+              Orçamento mensal (R$){" "}
+              <span className="text-slate-400 dark:text-slate-500 font-normal text-xs">(opcional)</span>
+            </label>
+            <input
+              type="number"
+              min="0.01"
+              step="0.01"
+              value={budget}
+              onChange={(e) => setBudget(e.target.value)}
+              className="w-full px-3.5 py-2.5 border border-slate-200 dark:border-slate-600/50 rounded-xl text-sm text-slate-800 dark:text-white bg-white dark:bg-slate-900/60 placeholder-slate-400 dark:placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-orange-400/40 focus:border-orange-400 dark:focus:border-orange-500/50 transition"
+              placeholder="0,00"
+            />
+            <p className="text-xs text-slate-400 dark:text-slate-500 mt-1">Alertamos quando os gastos do mês passarem desse teto.</p>
           </div>
 
           <div className="flex gap-3 pt-2">

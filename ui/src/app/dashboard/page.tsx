@@ -199,6 +199,7 @@ export default function DashboardPage() {
   const [budgetAlertDismissed, setBudgetAlertDismissed] = useState(false);
 
   const [searchQuery, setSearchQuery] = useState("");
+  const [paidFilter, setPaidFilter] = useState<"all" | "paid" | "unpaid" | "overdue">("all");
   const [sortField, setSortField] = useState<"date" | "amount" | "description">("date");
   const [sortDir, setSortDir] = useState<"desc" | "asc">("desc");
 
@@ -637,11 +638,18 @@ export default function DashboardPage() {
 
   // Transações filtradas pela busca e ordenadas
   const displayedTransactions = (() => {
-    const base = searchQuery.trim()
-      ? (summary?.transactions ?? []).filter((tx) =>
-          tx.description.toLowerCase().includes(searchQuery.toLowerCase())
-        )
-      : (summary?.transactions ?? []);
+    const today = new Date().toISOString().split("T")[0];
+    const q = searchQuery.trim().toLowerCase();
+    const base = (summary?.transactions ?? []).filter((tx) => {
+      if (q && !tx.description.toLowerCase().includes(q)) return false;
+      if (paidFilter === "paid" && !paidIds.has(tx.id)) return false;
+      if (paidFilter === "unpaid" && paidIds.has(tx.id)) return false;
+      if (paidFilter === "overdue") {
+        const od = tx.type === "expense" && !paidIds.has(tx.id) && !!tx.dueDate && tx.dueDate.split("T")[0] < today;
+        if (!od) return false;
+      }
+      return true;
+    });
     return [...base].sort((a, b) => {
       let cmp = 0;
       if (sortField === "date") cmp = a.date.localeCompare(b.date);
@@ -663,6 +671,19 @@ export default function DashboardPage() {
     }
     return { income, expense, count, net: income - expense };
   })();
+
+  const todayStr = new Date().toISOString().split("T")[0];
+  const isOverdue = (tx: Transaction) =>
+    tx.type === "expense" &&
+    !paidIds.has(tx.id) &&
+    !!tx.dueDate &&
+    tx.dueDate.split("T")[0] < todayStr;
+
+  // Total a pagar (despesas não pagas do período) e quantas vencidas
+  const pendingExpenseTotal = (summary?.transactions ?? [])
+    .filter((t) => t.type === "expense" && !paidIds.has(t.id))
+    .reduce((s, t) => s + Number(t.amount), 0);
+  const overdueCount = (summary?.transactions ?? []).filter(isOverdue).length;
 
   return (
     <div className="min-h-screen bg-slate-50 dark:bg-[#0c0e14] transition-colors duration-300">
@@ -784,7 +805,7 @@ export default function DashboardPage() {
         )}
 
         {/* Cards de resumo */}
-        <div className={`grid grid-cols-1 sm:grid-cols-3 gap-4 ${txLoading && !summary ? "hidden" : ""}`}>
+        <div className={`grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 ${txLoading && !summary ? "hidden" : ""}`}>
 
           {/* Receitas */}
           <div className="group relative bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 p-5 shadow-sm hover:shadow-md hover:-translate-y-0.5 transition-all duration-200 overflow-hidden">
@@ -890,6 +911,35 @@ export default function DashboardPage() {
                   {formatCurrency(projectedBalance)}
                 </span>
               </p>
+            )}
+          </div>
+
+          {/* A pagar */}
+          <div className="group relative bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 p-5 shadow-sm hover:shadow-md hover:-translate-y-0.5 transition-all duration-200 overflow-hidden">
+            <div className="absolute top-0 left-0 w-full h-0.5 bg-gradient-to-r from-amber-400 to-amber-600 rounded-t-2xl" />
+            <div className="flex items-center justify-between mb-4">
+              <span className="text-xs font-semibold text-slate-400 dark:text-slate-500 uppercase tracking-widest">A pagar</span>
+              <div className="w-9 h-9 rounded-2xl bg-amber-50 dark:bg-amber-900/30 flex items-center justify-center">
+                <svg className="w-4 h-4 text-amber-600 dark:text-amber-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+              </div>
+            </div>
+            <p className="text-2xl font-bold text-slate-900 dark:text-white tabular-nums">
+              {formatCurrency(pendingExpenseTotal)}
+            </p>
+            <p className="text-xs text-slate-400 dark:text-slate-500 mt-1.5">
+              {pendingExpenseTotal === 0
+                ? "Tudo pago neste período 🎉"
+                : overdueCount > 0
+                  ? "despesas em aberto"
+                  : "despesas ainda não pagas"}
+            </p>
+            {overdueCount > 0 && (
+              <div className="mt-3 inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-900/40">
+                <svg className="w-3 h-3 text-red-500 dark:text-red-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}><path strokeLinecap="round" strokeLinejoin="round" d="M12 9v2m0 4h.01M5 19h14a2 2 0 001.84-2.75L13.74 4a2 2 0 00-3.48 0L3.16 16.25A2 2 0 005 19z" /></svg>
+                <span className="text-xs font-semibold text-red-500 dark:text-red-400">{overdueCount} vencida{overdueCount !== 1 ? "s" : ""}</span>
+              </div>
             )}
           </div>
         </div>
@@ -1415,6 +1465,17 @@ export default function DashboardPage() {
                 </select>
 
                 <select
+                  value={paidFilter}
+                  onChange={(e) => setPaidFilter(e.target.value as "all" | "paid" | "unpaid" | "overdue")}
+                  className="px-3 py-2 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl text-sm text-slate-700 dark:text-slate-300 focus:outline-none focus:ring-2 focus:ring-orange-400/30 focus:border-orange-400 dark:focus:border-orange-500 transition shadow-sm"
+                >
+                  <option value="all">Pagas e não pagas</option>
+                  <option value="paid">Só pagas</option>
+                  <option value="unpaid">Só não pagas</option>
+                  <option value="overdue">Só vencidas</option>
+                </select>
+
+                <select
                   value={filters.categoryId || ""}
                   onChange={(e) => updateFilters({ ...filtersRef.current, categoryId: e.target.value || undefined })}
                   className="px-3 py-2 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl text-sm text-slate-700 dark:text-slate-300 focus:outline-none focus:ring-2 focus:ring-orange-400/30 focus:border-orange-400 dark:focus:border-orange-500 transition shadow-sm"
@@ -1556,7 +1617,7 @@ export default function DashboardPage() {
                         <span className="text-xs font-bold text-amber-700 dark:text-amber-300 tabular-nums">{formatCurrency(pendingExpense)}</span>
                       </div>
                     )}
-                    <span className="text-xs text-slate-400 dark:text-slate-500 self-center">{displayedTransactions.length} movimentação{displayedTransactions.length !== 1 ? "ões" : ""}</span>
+                    <span className="text-xs text-slate-400 dark:text-slate-500 self-center">{displayedTransactions.length} movimenta{displayedTransactions.length !== 1 ? "ções" : "ção"}</span>
                   </div>
                   {(filters.type || filters.categoryId || searchQuery.trim()) && (
                     <button
@@ -1630,6 +1691,19 @@ export default function DashboardPage() {
                 </div>
               ) : (
                 <>
+                  {/* Mobile: resumo de pago */}
+                  {paidStats.count > 0 && (
+                    <div className="sm:hidden flex items-center justify-between px-4 py-2.5 bg-emerald-50/70 dark:bg-emerald-900/15 border-b border-emerald-100 dark:border-emerald-900/30">
+                      <span className="inline-flex items-center gap-1.5 text-xs font-bold text-emerald-700 dark:text-emerald-400 uppercase tracking-wide">
+                        <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}><path strokeLinecap="round" strokeLinejoin="round" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+                        {paidStats.count} pago{paidStats.count !== 1 ? "s" : ""}
+                      </span>
+                      <span className={`text-xs font-bold tabular-nums ${paidStats.net >= 0 ? "text-emerald-600 dark:text-emerald-400" : "text-red-500 dark:text-red-400"}`}>
+                        {paidStats.net >= 0 ? "+" : "-"}{formatCurrency(Math.abs(paidStats.net))}
+                      </span>
+                    </div>
+                  )}
+
                   {/* Mobile: cards com swipe */}
                   <div className="sm:hidden divide-y divide-slate-100 dark:divide-slate-800">
                     {displayedTransactions.map((tx) => (
@@ -1725,6 +1799,12 @@ export default function DashboardPage() {
                                       <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md bg-violet-50 dark:bg-violet-900/20 text-violet-600 dark:text-violet-400 text-[10px] font-medium border border-violet-200 dark:border-violet-800/50">
                                         <svg className="w-2.5 h-2.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}><path strokeLinecap="round" strokeLinejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" /></svg>
                                         {tx.recurringFrequency === "monthly" ? "Mensal" : tx.recurringFrequency === "weekly" ? "Semanal" : "Anual"}
+                                      </span>
+                                    )}
+                                    {isOverdue(tx) && (
+                                      <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md bg-red-50 dark:bg-red-900/30 text-red-600 dark:text-red-400 text-[10px] font-semibold border border-red-200 dark:border-red-800/50">
+                                        <svg className="w-2.5 h-2.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}><path strokeLinecap="round" strokeLinejoin="round" d="M12 8v4m0 4h.01M12 3a9 9 0 100 18 9 9 0 000-18z" /></svg>
+                                        Vencida
                                       </span>
                                     )}
                                   </div>
@@ -1895,6 +1975,12 @@ export default function DashboardPage() {
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
                 {categories.map((cat) => {
                   const usedCount = summary?.transactions.filter((tx) => tx.category?.id === cat.id).length ?? 0;
+                  const spent = summary?.transactions
+                    .filter((tx) => tx.category?.id === cat.id && tx.type === "expense")
+                    .reduce((s, tx) => s + Number(tx.amount), 0) ?? 0;
+                  const budget = cat.monthlyBudget != null ? Number(cat.monthlyBudget) : null;
+                  const pct = budget && budget > 0 ? Math.min(100, (spent / budget) * 100) : 0;
+                  const overBudget = budget != null && spent > budget;
                   const gradient = categoryGradient(cat.name);
                   const isPending = pendingCatIds.has(cat.id);
                   return (
@@ -1938,12 +2024,33 @@ export default function DashboardPage() {
                       </div>
                       <div className="mt-3 pt-3 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between">
                         <span className="text-xs text-slate-400 dark:text-slate-500">
-                          {usedCount} movimentação{usedCount !== 1 ? "ões" : ""} associada{usedCount !== 1 ? "s" : ""}
+                          {usedCount} movimenta{usedCount !== 1 ? "ções" : "ção"} associada{usedCount !== 1 ? "s" : ""}
                         </span>
                         {usedCount > 0 && (
                           <span className="text-xs font-semibold text-orange-500 dark:text-orange-400">{usedCount} tx</span>
                         )}
                       </div>
+                      {budget != null && (
+                        <div className="mt-3">
+                          <div className="flex items-center justify-between text-xs mb-1">
+                            <span className={`font-medium ${overBudget ? "text-red-500 dark:text-red-400" : "text-slate-500 dark:text-slate-400"}`}>
+                              {formatCurrency(spent)} / {formatCurrency(budget)}
+                            </span>
+                            {overBudget && (
+                              <span className="inline-flex items-center gap-1 font-semibold text-red-500 dark:text-red-400">
+                                <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}><path strokeLinecap="round" strokeLinejoin="round" d="M12 9v2m0 4h.01M5 19h14a2 2 0 001.84-2.75L13.74 4a2 2 0 00-3.48 0L3.16 16.25A2 2 0 005 19z" /></svg>
+                                Estourou
+                              </span>
+                            )}
+                          </div>
+                          <div className="h-1.5 rounded-full bg-slate-100 dark:bg-slate-800 overflow-hidden">
+                            <div
+                              className={`h-full rounded-full transition-all ${overBudget ? "bg-red-500" : pct > 80 ? "bg-amber-500" : "bg-emerald-500"}`}
+                              style={{ width: `${budget > 0 ? Math.min(100, (spent / budget) * 100) : 0}%` }}
+                            />
+                          </div>
+                        </div>
+                      )}
                     </div>
                   );
                 })}

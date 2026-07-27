@@ -22,6 +22,9 @@ export class Category {
   @Column({ nullable: true })
   description: string;
 
+  @Column({ type: 'decimal', precision: 12, scale: 2, nullable: true })
+  monthlyBudget: number | null;
+
   @ManyToOne(() => User, (user) => user.categories, { onDelete: 'CASCADE' })
   @JoinColumn({ name: 'userId' })
   user: User;

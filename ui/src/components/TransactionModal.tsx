@@ -24,6 +24,9 @@ const emptyForm: CreateTransactionPayload = {
   date: new Date().toISOString().split("T")[0],
   notes: "",
   categoryId: "",
+  dueDate: "",
+  isRecurring: false,
+  recurringFrequency: "monthly",
 };
 
 export default function TransactionModal({
@@ -47,6 +50,9 @@ export default function TransactionModal({
         date: editing.date.split("T")[0],
         notes: editing.notes || "",
         categoryId: editing.categoryId || "",
+        dueDate: editing.dueDate ? editing.dueDate.split("T")[0] : "",
+        isRecurring: editing.isRecurring || false,
+        recurringFrequency: editing.recurringFrequency || "monthly",
       });
     } else {
       setForm(emptyForm);
@@ -66,6 +72,9 @@ export default function TransactionModal({
       date: form.date,
       categoryId: form.categoryId || undefined,
       notes: form.notes || undefined,
+      dueDate: form.dueDate || undefined,
+      isRecurring: form.isRecurring || false,
+      recurringFrequency: form.isRecurring ? form.recurringFrequency : undefined,
     };
 
     try {
@@ -229,6 +238,60 @@ export default function TransactionModal({
                   </option>
                 ))}
               </select>
+            )}
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1.5">
+              Vencimento{" "}
+              <span className="text-slate-400 dark:text-slate-500 font-normal text-xs">(opcional)</span>
+            </label>
+            <input
+              type="date"
+              value={form.dueDate || ""}
+              onChange={(e) => setForm({ ...form, dueDate: e.target.value })}
+              className="w-full px-3.5 py-2.5 border border-slate-200 dark:border-slate-600/50 rounded-xl text-sm text-slate-800 dark:text-white bg-white dark:bg-slate-900/60 focus:outline-none focus:ring-2 focus:ring-orange-400/40 focus:border-orange-400 dark:focus:border-orange-500/50 transition"
+            />
+            <p className="text-xs text-slate-400 dark:text-slate-500 mt-1">Despesas não pagas após esta data aparecem como “Vencida”.</p>
+          </div>
+
+          <div className="rounded-xl border border-slate-200 dark:border-slate-600/50 p-3.5">
+            <label className="flex items-center gap-3 cursor-pointer select-none">
+              <button
+                type="button"
+                role="switch"
+                aria-checked={form.isRecurring || false}
+                onClick={() => setForm({ ...form, isRecurring: !form.isRecurring })}
+                className={`relative w-10 h-6 rounded-full transition-colors shrink-0 ${form.isRecurring ? "bg-orange-500" : "bg-slate-300 dark:bg-slate-600"}`}
+              >
+                <span className={`absolute top-0.5 left-0.5 w-5 h-5 rounded-full bg-white shadow transition-transform ${form.isRecurring ? "translate-x-4" : ""}`} />
+              </button>
+              <div>
+                <span className="block text-sm font-medium text-slate-700 dark:text-slate-300">Repetir automaticamente</span>
+                <span className="block text-xs text-slate-400 dark:text-slate-500">Gera as próximas ocorrências sozinho</span>
+              </div>
+            </label>
+            {form.isRecurring && (
+              <div className="grid grid-cols-3 gap-2 mt-3">
+                {([
+                  { v: "weekly", label: "Semanal" },
+                  { v: "monthly", label: "Mensal" },
+                  { v: "yearly", label: "Anual" },
+                ] as const).map(({ v, label }) => (
+                  <button
+                    key={v}
+                    type="button"
+                    onClick={() => setForm({ ...form, recurringFrequency: v })}
+                    className={`py-2 rounded-lg text-xs font-medium transition ${
+                      form.recurringFrequency === v
+                        ? "bg-orange-500 text-white shadow-sm"
+                        : "bg-slate-100 dark:bg-slate-700 text-slate-500 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-600"
+                    }`}
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
             )}
           </div>
 

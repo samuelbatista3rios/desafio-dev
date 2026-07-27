@@ -10,7 +10,7 @@ import {
   IsString,
   IsUUID,
 } from 'class-validator';
-import { TransactionType } from '../transaction.entity';
+import { RecurringFrequency, TransactionType } from '../transaction.entity';
 
 export class CreateTransactionDto {
   @ApiProperty({ example: 'Salário mensal' })
@@ -45,4 +45,19 @@ export class CreateTransactionDto {
   @IsOptional()
   @IsBoolean({ message: 'isPaid deve ser booleano' })
   isPaid?: boolean;
+
+  @ApiPropertyOptional({ example: '2024-02-10', description: 'Data de vencimento' })
+  @IsOptional()
+  @IsDateString({}, { message: 'Data de vencimento inválida' })
+  dueDate?: string;
+
+  @ApiPropertyOptional({ example: false, description: 'Se a movimentação se repete' })
+  @IsOptional()
+  @IsBoolean({ message: 'isRecurring deve ser booleano' })
+  isRecurring?: boolean;
+
+  @ApiPropertyOptional({ enum: RecurringFrequency, description: 'Frequência da recorrência' })
+  @IsOptional()
+  @IsEnum(RecurringFrequency, { message: 'Frequência deve ser weekly, monthly ou yearly' })
+  recurringFrequency?: RecurringFrequency;
 }

@@ -83,12 +83,12 @@ export const usersApi = {
 // Categories
 export const categoriesApi = {
   list: () => request<Category[]>("/categories"),
-  create: (data: { name: string; description?: string }) =>
+  create: (data: { name: string; description?: string; monthlyBudget?: number | null }) =>
     request<Category>("/categories", {
       method: "POST",
       body: JSON.stringify(data),
     }),
-  update: (id: string, data: { name?: string; description?: string }) =>
+  update: (id: string, data: { name?: string; description?: string; monthlyBudget?: number | null }) =>
     request<Category>(`/categories/${id}`, {
       method: "PATCH",
       body: JSON.stringify(data),
@@ -152,6 +152,7 @@ export interface Category {
   id: string;
   name: string;
   description?: string;
+  monthlyBudget?: number | null;
   userId: string;
 }
 
@@ -169,8 +170,10 @@ export interface Transaction {
   userId: string;
   createdAt: string;
   isPaid?: boolean;
+  dueDate?: string | null;
   isRecurring?: boolean;
-  recurringFrequency?: "monthly" | "weekly" | "yearly";
+  recurringFrequency?: "monthly" | "weekly" | "yearly" | null;
+  recurringParentId?: string | null;
 }
 
 export interface TransactionSummary {
@@ -194,6 +197,9 @@ export interface CreateTransactionPayload {
   date: string;
   notes?: string;
   categoryId?: string;
+  dueDate?: string;
+  isRecurring?: boolean;
+  recurringFrequency?: "monthly" | "weekly" | "yearly";
 }
 
 export interface Goal {

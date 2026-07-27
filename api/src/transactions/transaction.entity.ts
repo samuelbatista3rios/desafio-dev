@@ -15,6 +15,12 @@ export enum TransactionType {
   EXPENSE = 'expense',
 }
 
+export enum RecurringFrequency {
+  WEEKLY = 'weekly',
+  MONTHLY = 'monthly',
+  YEARLY = 'yearly',
+}
+
 @Entity('transactions')
 export class Transaction {
   @PrimaryGeneratedColumn('uuid')
@@ -37,6 +43,18 @@ export class Transaction {
 
   @Column({ type: 'boolean', default: false })
   isPaid: boolean;
+
+  @Column({ type: 'date', nullable: true })
+  dueDate: Date | null;
+
+  @Column({ type: 'boolean', default: false })
+  isRecurring: boolean;
+
+  @Column({ type: 'enum', enum: RecurringFrequency, nullable: true })
+  recurringFrequency: RecurringFrequency | null;
+
+  @Column({ type: 'uuid', nullable: true })
+  recurringParentId: string | null;
 
   @ManyToOne(() => User, (user) => user.transactions, { onDelete: 'CASCADE' })
   @JoinColumn({ name: 'userId' })
