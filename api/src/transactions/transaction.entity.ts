@@ -35,6 +35,9 @@ export class Transaction {
   @Column({ nullable: true })
   notes: string;
 
+  @Column({ type: 'boolean', default: false })
+  isPaid: boolean;
+
   @ManyToOne(() => User, (user) => user.transactions, { onDelete: 'CASCADE' })
   @JoinColumn({ name: 'userId' })
   user: User;

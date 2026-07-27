@@ -118,6 +118,11 @@ export const transactionsApi = {
       method: "PATCH",
       body: JSON.stringify(data),
     }),
+  setPaid: (id: string, isPaid: boolean) =>
+    request<Transaction>(`/transactions/${id}`, {
+      method: "PATCH",
+      body: JSON.stringify({ isPaid }),
+    }),
   remove: (id: string) =>
     request<void>(`/transactions/${id}`, { method: "DELETE" }),
 };
@@ -163,6 +168,7 @@ export interface Transaction {
   category?: Category;
   userId: string;
   createdAt: string;
+  isPaid?: boolean;
   isRecurring?: boolean;
   recurringFrequency?: "monthly" | "weekly" | "yearly";
 }

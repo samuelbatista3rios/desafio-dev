@@ -144,21 +144,33 @@ export default function DashboardPage() {
 
   const [paidIds, setPaidIds] = useState<Set<string>>(new Set());
 
+  // Deriva os pagos a partir do backend sempre que a lista é recarregada
   useEffect(() => {
-    try {
-      const stored = localStorage.getItem("paid_transactions");
-      if (stored) setPaidIds(new Set(JSON.parse(stored)));
-    } catch { /* ignore */ }
-  }, []);
+    if (!summary) return;
+    setPaidIds(new Set(summary.transactions.filter((t) => t.isPaid).map((t) => t.id)));
+  }, [summary]);
 
-  function togglePaid(id: string) {
+  async function togglePaid(id: string) {
+    const wasPaid = paidIds.has(id);
+    // Atualização otimista
     setPaidIds((prev) => {
       const next = new Set(prev);
-      if (next.has(id)) next.delete(id);
+      if (wasPaid) next.delete(id);
       else next.add(id);
-      localStorage.setItem("paid_transactions", JSON.stringify([...next]));
       return next;
     });
+    try {
+      await transactionsApi.setPaid(id, !wasPaid);
+    } catch {
+      // Reverte em caso de falha
+      setPaidIds((prev) => {
+        const next = new Set(prev);
+        if (wasPaid) next.add(id);
+        else next.delete(id);
+        return next;
+      });
+      showError("Não foi possível atualizar o status de pago");
+    }
   }
 
   // Feature 4: Budget alert
@@ -615,6 +627,19 @@ export default function DashboardPage() {
       else if (sortField === "description") cmp = a.description.localeCompare(b.description);
       return sortDir === "asc" ? cmp : -cmp;
     });
+  })();
+
+  // Soma das movimentações marcadas como pagas (dentro da lista exibida)
+  const paidStats = (() => {
+    let income = 0, expense = 0, count = 0;
+    for (const tx of displayedTransactions) {
+      if (!paidIds.has(tx.id)) continue;
+      count++;
+      const amt = Number(tx.amount);
+      if (tx.type === "income") income += amt;
+      else expense += amt;
+    }
+    return { income, expense, count, net: income - expense };
   })();
 
   return (
@@ -1733,6 +1758,37 @@ export default function DashboardPage() {
                           return rows;
                         }, [])}
                       </tbody>
+                      {paidStats.count > 0 && (
+                        <tfoot>
+                          <tr className="border-t-2 border-emerald-200 dark:border-emerald-900/50 bg-emerald-50/70 dark:bg-emerald-900/15">
+                            <td colSpan={4} className="px-5 py-3.5">
+                              <div className="flex items-center gap-2.5 flex-wrap">
+                                <span className="inline-flex items-center gap-1.5 text-xs font-bold text-emerald-700 dark:text-emerald-400 uppercase tracking-widest">
+                                  <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+                                    <path strokeLinecap="round" strokeLinejoin="round" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                  </svg>
+                                  {paidStats.count} pago{paidStats.count !== 1 ? "s" : ""}
+                                </span>
+                                {paidStats.income > 0 && (
+                                  <span className="text-xs font-medium text-emerald-600 dark:text-emerald-400 tabular-nums">+{formatCurrency(paidStats.income)}</span>
+                                )}
+                                {paidStats.expense > 0 && (
+                                  <span className="text-xs font-medium text-red-500 dark:text-red-400 tabular-nums">-{formatCurrency(paidStats.expense)}</span>
+                                )}
+                              </div>
+                            </td>
+                            <td className="px-5 py-3.5 text-right">
+                              <div className="flex flex-col items-end leading-tight">
+                                <span className="text-[10px] font-semibold text-slate-400 dark:text-slate-500 uppercase tracking-widest">Total pago</span>
+                                <span className={`text-sm font-bold tabular-nums ${paidStats.net >= 0 ? "text-emerald-600 dark:text-emerald-400" : "text-red-500 dark:text-red-400"}`}>
+                                  {paidStats.net >= 0 ? "+" : "-"}{formatCurrency(Math.abs(paidStats.net))}
+                                </span>
+                              </div>
+                            </td>
+                            <td colSpan={2} />
+                          </tr>
+                        </tfoot>
+                      )}
                     </table>
                   </div>
                 </>

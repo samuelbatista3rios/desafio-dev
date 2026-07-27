@@ -27,7 +27,7 @@ import { Goal } from './goals/goal.entity';
             type: 'postgres',
             url,
             entities: [User, Category, Transaction, Goal],
-            synchronize: config.get('NODE_ENV') !== 'production',
+            synchronize: config.get('DB_SYNCHRONIZE') === 'true',
             logging: false,
             ssl: { rejectUnauthorized: false },
           };

@@ -1,5 +1,6 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import {
+  IsBoolean,
   IsDateString,
   IsEnum,
   IsNotEmpty,
@@ -39,4 +40,9 @@ export class CreateTransactionDto {
   @IsOptional()
   @IsUUID('4', { message: 'ID de categoria inválido' })
   categoryId?: string;
+
+  @ApiPropertyOptional({ example: false, description: 'Se a movimentação já foi paga' })
+  @IsOptional()
+  @IsBoolean({ message: 'isPaid deve ser booleano' })
+  isPaid?: boolean;
 }
