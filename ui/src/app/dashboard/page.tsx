@@ -48,10 +48,11 @@ function getCurrentDateLabel() {
   });
 }
 
-type Tab = "transactions" | "categories" | "goals";
+type Tab = "transactions" | "bills" | "categories" | "goals";
 
 const TAB_LABELS: Record<Tab, string> = {
   transactions: "Movimentações",
+  bills: "Contas a pagar",
   categories: "Categorias",
   goals: "Metas",
 };
@@ -161,6 +162,7 @@ export default function DashboardPage() {
     });
     try {
       await transactionsApi.setPaid(id, !wasPaid);
+      fetchBills();
     } catch {
       // Reverte em caso de falha
       setPaidIds((prev) => {
@@ -189,14 +191,38 @@ export default function DashboardPage() {
     });
     try {
       await Promise.all(changed.map((t) => transactionsApi.setPaid(t.id, targetPaid)));
+      fetchBills();
     } catch {
       setPaidIds(prevIds); // reverte tudo
       showError("Não foi possível atualizar todas as movimentações");
     }
   }
 
+  // Marca uma conta como paga a partir da central de contas
+  async function markBillPaid(id: string) {
+    const prev = bills;
+    setBills((b) => b.filter((t) => t.id !== id)); // remove otimista
+    setPaidIds((p) => new Set(p).add(id)); // sincroniza com a lista de movimentações
+    try {
+      await transactionsApi.setPaid(id, true);
+      showSuccess("Conta marcada como paga!");
+    } catch {
+      setBills(prev);
+      setPaidIds((p) => {
+        const n = new Set(p);
+        n.delete(id);
+        return n;
+      });
+      showError("Não foi possível marcar como paga");
+    }
+  }
+
   // Feature 4: Budget alert
   const [budgetAlertDismissed, setBudgetAlertDismissed] = useState(false);
+
+  // Central de contas a pagar (despesas não pagas em janela ampla de datas)
+  const [bills, setBills] = useState<Transaction[]>([]);
+  const [billsAlertDismissed, setBillsAlertDismissed] = useState(false);
 
   const [searchQuery, setSearchQuery] = useState("");
   const [paidFilter, setPaidFilter] = useState<"all" | "paid" | "unpaid" | "overdue">("all");
@@ -241,6 +267,7 @@ export default function DashboardPage() {
     fetchChartData();
     fetchGoals();
     fetchAnnualData();
+    fetchBills();
     // applyRecurring: ativar após deploy do backend com suporte a isRecurring
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [ready]);
@@ -269,6 +296,19 @@ export default function DashboardPage() {
       }
     } finally {
       setTxLoading(false);
+    }
+  }
+
+  // Carrega despesas não pagas numa janela ampla (independe do mês filtrado)
+  async function fetchBills() {
+    try {
+      const now = new Date();
+      const startDate = new Date(now.getFullYear() - 2, now.getMonth(), 1).toISOString().split("T")[0];
+      const endDate = new Date(now.getFullYear() + 1, now.getMonth() + 1, 0).toISOString().split("T")[0];
+      const data = await transactionsApi.list({ type: "expense", startDate, endDate });
+      setBills(data.transactions.filter((t) => !t.isPaid));
+    } catch {
+      /* silencioso */
     }
   }
 
@@ -685,6 +725,25 @@ export default function DashboardPage() {
     .reduce((s, t) => s + Number(t.amount), 0);
   const overdueCount = (summary?.transactions ?? []).filter(isOverdue).length;
 
+  // Central de contas a pagar: agrupa despesas não pagas por vencimento
+  const in7Date = new Date();
+  in7Date.setDate(in7Date.getDate() + 7);
+  const in7Str = in7Date.toISOString().split("T")[0];
+  const dueOf = (t: Transaction) => (t.dueDate ? t.dueDate.split("T")[0] : null);
+  const billsSorted = [...bills].sort((a, b) => (dueOf(a) ?? "9999-12-31").localeCompare(dueOf(b) ?? "9999-12-31"));
+  const sumAmt = (arr: Transaction[]) => arr.reduce((s, t) => s + Number(t.amount), 0);
+  const billGroups = {
+    overdue: billsSorted.filter((t) => dueOf(t) && dueOf(t)! < todayStr),
+    soon: billsSorted.filter((t) => dueOf(t) && dueOf(t)! >= todayStr && dueOf(t)! <= in7Str),
+    later: billsSorted.filter((t) => dueOf(t) && dueOf(t)! > in7Str),
+    noDate: billsSorted.filter((t) => !dueOf(t)),
+  };
+  const billsOverdueTotal = sumAmt(billGroups.overdue);
+  const billsSoonTotal = sumAmt(billGroups.soon);
+  const billsTotal = sumAmt(billsSorted);
+  const daysUntil = (dateStr: string) =>
+    Math.round((new Date(dateStr + "T12:00:00Z").getTime() - new Date(todayStr + "T12:00:00Z").getTime()) / 86400000);
+
   return (
     <div className="min-h-screen bg-slate-50 dark:bg-[#0c0e14] transition-colors duration-300">
 
@@ -801,6 +860,47 @@ export default function DashboardPage() {
                 <div className="h-2.5 w-24 bg-slate-100 dark:bg-slate-800 rounded animate-pulse" />
               </div>
             ))}
+          </div>
+        )}
+
+        {/* Banner de contas a pagar */}
+        {!billsAlertDismissed && (billGroups.overdue.length > 0 || billGroups.soon.length > 0) && (
+          <div className={`flex items-start gap-3 rounded-2xl border p-4 shadow-sm ${
+            billGroups.overdue.length > 0
+              ? "bg-red-50 dark:bg-red-900/15 border-red-200 dark:border-red-900/40"
+              : "bg-amber-50 dark:bg-amber-900/15 border-amber-200 dark:border-amber-900/40"
+          }`}>
+            <div className={`w-9 h-9 rounded-xl flex items-center justify-center shrink-0 ${billGroups.overdue.length > 0 ? "bg-red-100 dark:bg-red-900/40" : "bg-amber-100 dark:bg-amber-900/40"}`}>
+              <svg className={`w-5 h-5 ${billGroups.overdue.length > 0 ? "text-red-500 dark:text-red-400" : "text-amber-500 dark:text-amber-400"}`} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" />
+              </svg>
+            </div>
+            <div className="flex-1 min-w-0">
+              <p className="text-sm font-semibold text-slate-800 dark:text-slate-200">
+                {billGroups.overdue.length > 0
+                  ? `${billGroups.overdue.length} conta${billGroups.overdue.length !== 1 ? "s" : ""} vencida${billGroups.overdue.length !== 1 ? "s" : ""} • ${formatCurrency(billsOverdueTotal)}`
+                  : `${billGroups.soon.length} conta${billGroups.soon.length !== 1 ? "s" : ""} a vencer em breve • ${formatCurrency(billsSoonTotal)}`}
+              </p>
+              <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+                {billGroups.overdue.length > 0 && billGroups.soon.length > 0
+                  ? `E mais ${billGroups.soon.length} vencendo nos próximos 7 dias.`
+                  : "Confira suas contas em aberto e marque as que já pagou."}
+              </p>
+              <button
+                onClick={() => setTab("bills")}
+                className={`mt-2 inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold text-white transition ${billGroups.overdue.length > 0 ? "bg-red-500 hover:bg-red-600" : "bg-amber-500 hover:bg-amber-600"}`}
+              >
+                Ver contas a pagar
+                <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}><path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" /></svg>
+              </button>
+            </div>
+            <button
+              onClick={() => setBillsAlertDismissed(true)}
+              className="p-1 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 shrink-0"
+              title="Dispensar"
+            >
+              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" /></svg>
+            </button>
           </div>
         )}
 
@@ -1430,18 +1530,25 @@ export default function DashboardPage() {
         )}
 
         {/* Tabs */}
-        <div className="flex items-center border-b border-slate-200 dark:border-slate-800 gap-0">
-          {(["transactions", "categories", "goals"] as Tab[]).map((t) => (
+        <div className="flex items-center border-b border-slate-200 dark:border-slate-800 gap-0 overflow-x-auto">
+          {(["transactions", "bills", "categories", "goals"] as Tab[]).map((t) => (
             <button
               key={t}
               onClick={() => setTab(t)}
-              className={`relative px-5 py-3 text-sm font-semibold transition-colors ${
+              className={`relative px-5 py-3 text-sm font-semibold transition-colors whitespace-nowrap ${
                 tab === t
                   ? "text-orange-600 dark:text-orange-400"
                   : "text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200"
               }`}
             >
-              {TAB_LABELS[t]}
+              <span className="inline-flex items-center gap-1.5">
+                {TAB_LABELS[t]}
+                {t === "bills" && billGroups.overdue.length > 0 && (
+                  <span className="inline-flex items-center justify-center min-w-[18px] h-[18px] px-1 rounded-full bg-red-500 text-white text-[10px] font-bold">
+                    {billGroups.overdue.length}
+                  </span>
+                )}
+              </span>
               {tab === t && (
                 <span className="absolute bottom-0 left-3 right-3 h-0.5 bg-orange-500 rounded-t-full" />
               )}
@@ -1927,6 +2034,94 @@ export default function DashboardPage() {
                 </>
               )}
             </div>
+          </div>
+        )}
+
+        {/* Tab: Contas a pagar */}
+        {tab === "bills" && (
+          <div className="space-y-4">
+            {/* Resumo */}
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+              <div className="bg-white dark:bg-slate-900 rounded-2xl border border-red-200 dark:border-red-900/40 p-4 shadow-sm">
+                <span className="text-xs font-semibold text-red-500 dark:text-red-400 uppercase tracking-widest">Vencido</span>
+                <p className="text-xl font-bold text-slate-900 dark:text-white tabular-nums mt-1">{formatCurrency(billsOverdueTotal)}</p>
+                <p className="text-xs text-slate-400 dark:text-slate-500 mt-0.5">{billGroups.overdue.length} conta{billGroups.overdue.length !== 1 ? "s" : ""}</p>
+              </div>
+              <div className="bg-white dark:bg-slate-900 rounded-2xl border border-amber-200 dark:border-amber-900/40 p-4 shadow-sm">
+                <span className="text-xs font-semibold text-amber-500 dark:text-amber-400 uppercase tracking-widest">Vence em 7 dias</span>
+                <p className="text-xl font-bold text-slate-900 dark:text-white tabular-nums mt-1">{formatCurrency(billsSoonTotal)}</p>
+                <p className="text-xs text-slate-400 dark:text-slate-500 mt-0.5">{billGroups.soon.length} conta{billGroups.soon.length !== 1 ? "s" : ""}</p>
+              </div>
+              <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 p-4 shadow-sm">
+                <span className="text-xs font-semibold text-slate-400 dark:text-slate-500 uppercase tracking-widest">Total em aberto</span>
+                <p className="text-xl font-bold text-slate-900 dark:text-white tabular-nums mt-1">{formatCurrency(billsTotal)}</p>
+                <p className="text-xs text-slate-400 dark:text-slate-500 mt-0.5">{billsSorted.length} conta{billsSorted.length !== 1 ? "s" : ""}</p>
+              </div>
+            </div>
+
+            {billsSorted.length === 0 ? (
+              <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 py-16 flex flex-col items-center shadow-sm">
+                <div className="w-14 h-14 rounded-2xl bg-emerald-50 dark:bg-emerald-900/20 flex items-center justify-center mb-4">
+                  <svg className="w-7 h-7 text-emerald-500 dark:text-emerald-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                  </svg>
+                </div>
+                <p className="text-sm font-semibold text-slate-700 dark:text-slate-300">Nenhuma conta em aberto</p>
+                <p className="text-xs text-slate-400 dark:text-slate-500 mt-1">Todas as despesas com vencimento estão pagas. 🎉</p>
+              </div>
+            ) : (
+              ([
+                { key: "overdue", title: "Vencidas", items: billGroups.overdue, tone: "red" },
+                { key: "soon", title: "Vencem em até 7 dias", items: billGroups.soon, tone: "amber" },
+                { key: "later", title: "A vencer", items: billGroups.later, tone: "slate" },
+                { key: "noDate", title: "Sem vencimento", items: billGroups.noDate, tone: "slate" },
+              ] as const).map((group) => group.items.length > 0 && (
+                <div key={group.key} className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm overflow-hidden">
+                  <div className={`flex items-center justify-between px-5 py-3 border-b border-slate-100 dark:border-slate-800 ${group.tone === "red" ? "bg-red-50/60 dark:bg-red-900/10" : group.tone === "amber" ? "bg-amber-50/60 dark:bg-amber-900/10" : "bg-slate-50/60 dark:bg-slate-800/40"}`}>
+                    <span className={`text-xs font-bold uppercase tracking-widest ${group.tone === "red" ? "text-red-500 dark:text-red-400" : group.tone === "amber" ? "text-amber-600 dark:text-amber-400" : "text-slate-400 dark:text-slate-500"}`}>
+                      {group.title} • {group.items.length}
+                    </span>
+                    <span className="text-xs font-bold text-slate-600 dark:text-slate-300 tabular-nums">{formatCurrency(sumAmt(group.items))}</span>
+                  </div>
+                  <div className="divide-y divide-slate-100 dark:divide-slate-800">
+                    {group.items.map((tx) => {
+                      const due = dueOf(tx);
+                      const d = due ? daysUntil(due) : null;
+                      const dueLabel = due == null ? "Sem data de vencimento"
+                        : d! < 0 ? `Venceu há ${Math.abs(d!)} dia${Math.abs(d!) !== 1 ? "s" : ""}`
+                        : d === 0 ? "Vence hoje"
+                        : d === 1 ? "Vence amanhã"
+                        : `Vence em ${d} dias`;
+                      return (
+                        <div key={tx.id} className="flex items-center gap-3 px-5 py-3.5 hover:bg-slate-50 dark:hover:bg-slate-800/40 transition-colors">
+                          <div className={`w-1 h-9 rounded-full shrink-0 ${group.tone === "red" ? "bg-red-400" : group.tone === "amber" ? "bg-amber-400" : "bg-slate-300 dark:bg-slate-600"}`} />
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center gap-2 flex-wrap">
+                              <p className="font-medium text-slate-800 dark:text-slate-200 truncate">{tx.description}</p>
+                              {tx.category?.name && (
+                                <span className="inline-flex items-center px-2 py-0.5 rounded-md bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400 text-[10px] font-medium border border-slate-200 dark:border-slate-700">{tx.category.name}</span>
+                              )}
+                            </div>
+                            <p className={`text-xs mt-0.5 ${group.tone === "red" ? "text-red-500 dark:text-red-400 font-medium" : "text-slate-400 dark:text-slate-500"}`}>
+                              {dueLabel}{due ? ` • ${formatDate(due)}` : ""}
+                            </p>
+                          </div>
+                          <span className="text-sm font-bold tabular-nums text-red-500 dark:text-red-400 shrink-0">-{formatCurrency(Number(tx.amount))}</span>
+                          <button
+                            onClick={() => markBillPaid(tx.id)}
+                            className="shrink-0 inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-emerald-500 hover:bg-emerald-600 active:scale-95 text-white text-xs font-semibold transition-all"
+                            title="Marcar como paga"
+                          >
+                            <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}><path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" /></svg>
+                            <span className="hidden sm:inline">Pagar</span>
+                          </button>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              ))
+            )}
           </div>
         )}
 
