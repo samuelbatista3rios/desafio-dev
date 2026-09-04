@@ -60,17 +60,19 @@ export class TransactionsService {
   }
 
   /**
-   * Materializa as ocorrências recorrentes até hoje. Cada "cabeça" de série
-   * (isRecurring=true, sem pai) gera instâncias filhas normais para cada
-   * período já vencido que ainda não exista.
+   * Materializa as ocorrências recorrentes até `until` (ou até hoje, o que for
+   * mais distante). Cada "cabeça" de série (isRecurring=true, sem pai) gera
+   * instâncias filhas normais para cada período já vencido que ainda não
+   * exista, permitindo navegar para meses futuros e ver a recorrência lá.
    */
-  private async materializeRecurring(userId: string): Promise<void> {
+  private async materializeRecurring(userId: string, until?: string): Promise<void> {
     const heads = await this.transactionsRepository.find({
       where: { userId, isRecurring: true, recurringParentId: IsNull() },
     });
     if (heads.length === 0) return;
 
     const today = new Date().toISOString().split('T')[0];
+    const limit = until && until > today ? until : today;
 
     for (const head of heads) {
       if (!head.recurringFrequency) continue;
@@ -88,7 +90,7 @@ export class TransactionsService {
       const toCreate: Transaction[] = [];
       let next = this.advanceDate(last, head.recurringFrequency);
       let guard = 0;
-      while (next <= today && guard < 500) {
+      while (next <= limit && guard < 500) {
         toCreate.push(
           this.transactionsRepository.create({
             description: head.description,
@@ -116,7 +118,7 @@ export class TransactionsService {
   }
 
   async findAll(userId: string, filters: TransactionFilters = {}): Promise<TransactionSummary> {
-    await this.materializeRecurring(userId);
+    await this.materializeRecurring(userId, filters.endDate);
 
     const query = this.transactionsRepository
       .createQueryBuilder('transaction')
